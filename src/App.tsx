@@ -94,7 +94,9 @@ function DebugView() {
       <h1>⬡ Mogly — Debug View (Phase 1)</h1>
 
       {error && (
-        <div style={{ color: '#f43f5e', marginBottom: 16, padding: 8, border: '1px solid #f43f5e' }}>
+        <div
+          style={{ color: '#f43f5e', marginBottom: 16, padding: 8, border: '1px solid #f43f5e' }}
+        >
           Error: {error}
         </div>
       )}
@@ -129,7 +131,16 @@ function DebugView() {
           ))}
 
           {messages.length > 0 && (
-            <pre style={{ background: '#1a1a1e', color: '#e8e8ec', padding: 16, borderRadius: 4, maxHeight: 500, overflow: 'auto' }}>
+            <pre
+              style={{
+                background: '#1a1a1e',
+                color: '#e8e8ec',
+                padding: 16,
+                borderRadius: 4,
+                maxHeight: 500,
+                overflow: 'auto',
+              }}
+            >
               {JSON.stringify(messages, null, 2)}
             </pre>
           )}
