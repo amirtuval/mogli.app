@@ -5,7 +5,12 @@ use tauri_plugin_store::StoreExt;
 
 use crate::models::Account;
 
+#[cfg(debug_assertions)]
+const STORE_FILENAME: &str = "accounts.dev.json";
+
+#[cfg(not(debug_assertions))]
 const STORE_FILENAME: &str = "accounts.json";
+
 const ACCOUNTS_KEY: &str = "accounts";
 
 /// In-memory account state, synced to disk via tauri-plugin-store.

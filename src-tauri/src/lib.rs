@@ -21,6 +21,7 @@ mod models;
 mod store;
 
 use store::AccountStore;
+use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
 /// Create the tauri-specta builder with all commands registered.
@@ -56,6 +57,12 @@ pub fn run() {
             // Load accounts from store on startup
             if let Err(e) = store::load_accounts(app.handle()) {
                 log::warn!("Failed to load accounts on startup: {e}");
+            }
+
+            // In debug builds, prefix the window title so dev is visually distinct
+            #[cfg(debug_assertions)]
+            if let Some(window) = app.webview_windows().values().next() {
+                let _ = window.set_title("[DEV] Mogly");
             }
 
             Ok(())

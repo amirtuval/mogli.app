@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+#[cfg(debug_assertions)]
+const SERVICE_NAME: &str = "mogly-dev";
+
+#[cfg(not(debug_assertions))]
 const SERVICE_NAME: &str = "mogly";
 
 /// Token data stored in the OS keychain.

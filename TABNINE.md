@@ -69,6 +69,18 @@ npx tsc --noEmit            # TypeScript typecheck
 - ESLint with react-hooks and react-refresh plugins
 - Functional components with hooks only
 
+## Debug vs release isolation
+
+Dev and production builds use completely separate storage so the app can be developed and used as a daily driver on the same machine:
+
+| Resource        | Debug (`yarn tauri dev`)    | Release (`yarn tauri build`) |
+| --------------- | --------------------------- | ---------------------------- |
+| Keychain service | `mogly-dev`                | `mogly`                      |
+| Store filename  | `accounts.dev.json`         | `accounts.json`              |
+| Window title    | `[DEV] Mogly`               | `Mogly`                      |
+
+Switching is automatic via `cfg(debug_assertions)` — no env vars or flags needed.
+
 ## Key conventions
 
 - Frontend ↔ backend communication is exclusively via Tauri commands (never direct HTTP from frontend)
