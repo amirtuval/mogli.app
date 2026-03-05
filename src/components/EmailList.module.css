@@ -1,0 +1,181 @@
+.container {
+  width: 296px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerInfo {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* ── Email row ── */
+.row {
+  display: flex;
+  align-items: stretch;
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--border-light);
+  transition: background 0.1s;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.rowSelected {
+  background: var(--bg-selected);
+}
+
+.rowContent {
+  flex: 1;
+  min-width: 0;
+  padding-left: 9px;
+}
+
+.senderLine {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.sender {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.senderUnread {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.starIcon {
+  color: #f97316;
+  font-size: 9px;
+}
+
+.subject {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snippet {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.timeUnread {
+  color: var(--text-primary);
+}
+
+.unreadDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4f9cf9;
+}
+
+/* ── Skeleton rows ── */
+.skeleton {
+  display: flex;
+  align-items: stretch;
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--border-light);
+  border-left: 2.5px solid var(--border);
+}
+
+.skeletonContent {
+  flex: 1;
+  padding-left: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skeletonLine {
+  height: 10px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeletonLineLong {
+  width: 75%;
+}
+
+.skeletonLineMedium {
+  width: 90%;
+}
+
+.skeletonLineShort {
+  width: 50%;
+}
+
+.skeletonTime {
+  width: 30px;
+  height: 10px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  flex-shrink: 0;
+  animation: shimmer 1.5s ease-in-out infinite;
+  animation-delay: 0.2s;
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── Empty state ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.emptyIcon {
+  font-size: 22px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}

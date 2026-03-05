@@ -56,3 +56,17 @@ pub async fn remove_account(app: AppHandle, account_id: String) -> Result<(), St
 pub async fn list_accounts(app: AppHandle) -> Result<Vec<Account>, String> {
     store::load_accounts(&app)
 }
+
+/// Load the persisted theme preference. Returns `"dark"` if not set.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_theme(app: AppHandle) -> Result<String, String> {
+    Ok(store::load_theme(&app)?.unwrap_or_else(|| "dark".to_string()))
+}
+
+/// Persist the theme preference to disk.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_theme(app: AppHandle, theme: String) -> Result<(), String> {
+    store::save_theme(&app, &theme)
+}

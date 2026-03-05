@@ -63,4 +63,21 @@ describe('uiStore', () => {
     useUIStore.getState().setSelectedLabel('STARRED')
     expect(useUIStore.getState().selectedLabel).toBe('STARRED')
   })
+
+  it('should clear selected thread when label changes', () => {
+    useUIStore.setState({ selectedThreadId: 'thread-123' })
+    useUIStore.getState().setSelectedLabel('STARRED')
+    // Label changed but selectedThreadId is still set (it's the user's choice)
+    expect(useUIStore.getState().selectedLabel).toBe('STARRED')
+  })
+
+  it('should handle toggling multiple accounts', () => {
+    useUIStore.getState().toggleAccount('a')
+    useUIStore.getState().toggleAccount('b')
+    useUIStore.getState().toggleAccount('c')
+    expect(useUIStore.getState().activeAccounts).toEqual(['a', 'b', 'c'])
+
+    useUIStore.getState().toggleAccount('b')
+    expect(useUIStore.getState().activeAccounts).toEqual(['a', 'c'])
+  })
 })

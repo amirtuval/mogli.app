@@ -78,3 +78,57 @@ pub async fn get_thread(
 
     gmail_api::fetch_thread(&creds, &account_id, &email, &thread_id).await
 }
+
+/// Helper to resolve account email from store.
+fn get_account_email(app: &AppHandle, account_id: &str) -> Result<String, String> {
+    let state = app.state::<AccountStore>();
+    let guard = state
+        .accounts
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
+    guard
+        .iter()
+        .find(|a| a.id == account_id)
+        .map(|a| a.email.clone())
+        .ok_or_else(|| format!("Account {account_id} not found"))
+}
+
+/// Archive a thread (remove from Inbox).
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_thread(
+    app: AppHandle,
+    account_id: String,
+    thread_id: String,
+) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = get_account_email(&app, &account_id)?;
+    gmail_api::archive_thread(&creds, &email, &thread_id).await
+}
+
+/// Star or unstar a thread.
+#[tauri::command]
+#[specta::specta]
+pub async fn star_thread(
+    app: AppHandle,
+    account_id: String,
+    thread_id: String,
+    starred: bool,
+) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = get_account_email(&app, &account_id)?;
+    gmail_api::star_thread(&creds, &email, &thread_id, starred).await
+}
+
+/// Mark a thread as read.
+#[tauri::command]
+#[specta::specta]
+pub async fn mark_read(
+    app: AppHandle,
+    account_id: String,
+    thread_id: String,
+) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = get_account_email(&app, &account_id)?;
+    gmail_api::mark_read(&creds, &email, &thread_id).await
+}

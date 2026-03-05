@@ -12,6 +12,7 @@ const STORE_FILENAME: &str = "accounts.dev.json";
 const STORE_FILENAME: &str = "accounts.json";
 
 const ACCOUNTS_KEY: &str = "accounts";
+const THEME_KEY: &str = "theme";
 
 /// In-memory account state, synced to disk via tauri-plugin-store.
 pub struct AccountStore {
@@ -93,6 +94,47 @@ pub fn account_count(app: &AppHandle) -> Result<usize, String> {
         .lock()
         .map_err(|e| format!("Lock error: {e}"))?;
     Ok(guard.len())
+}
+
+/// Load the persisted theme preference. Returns `None` if not set.
+pub fn load_theme(app: &AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    Ok(store
+        .get(THEME_KEY)
+        .and_then(|v| v.as_str().map(String::from)))
+}
+
+/// Persist the theme preference to disk.
+pub fn save_theme(app: &AppHandle, theme: &str) -> Result<(), String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    store.set(THEME_KEY, serde_json::json!(theme));
+    store.save().map_err(|e| format!("Save error: {e}"))?;
+    Ok(())
+}
+
+/// Update the `history_id` for an account (used by incremental sync).
+pub fn update_history_id(
+    app: &AppHandle,
+    account_id: &str,
+    history_id: &str,
+) -> Result<(), String> {
+    let state = app.state::<AccountStore>();
+    let mut guard = state
+        .accounts
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
+
+    if let Some(account) = guard.iter_mut().find(|a| a.id == account_id) {
+        account.history_id = history_id.to_string();
+    }
+    save_accounts(app, &guard)?;
+    Ok(())
 }
 
 #[cfg(test)]
