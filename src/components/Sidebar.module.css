@@ -1,0 +1,243 @@
+.sidebar {
+  width: 220px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+}
+
+/* ── Header: logo + themes ── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logoIcon {
+  font-size: 17px;
+  color: #4f9cf9;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.logoText {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.themeButtons {
+  display: flex;
+  gap: 3px;
+}
+
+.themeBtn {
+  border: none;
+  border-radius: 4px;
+  width: 21px;
+  height: 21px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-btn);
+  color: var(--text-muted);
+  transition: all 0.12s;
+}
+
+.themeBtn:hover {
+  opacity: 0.75;
+}
+
+.themeBtnActive {
+  background: #4f9cf9;
+  color: #fff;
+}
+
+/* ── Nav toggle: Mail / Calendar ── */
+.navToggle {
+  display: flex;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.navBtn {
+  flex: 1;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--bg-btn);
+  color: var(--text-secondary);
+  transition: all 0.12s;
+  position: relative;
+}
+
+.navBtnActive {
+  background: #4f9cf9;
+  color: #fff;
+}
+
+.navBtnIcon {
+  font-size: 11px;
+}
+
+.navBadge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 6px;
+  line-height: 1.4;
+  color: #fff;
+}
+
+.navBadgeActive {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.navBadgeInactive {
+  background: #4f9cf9;
+}
+
+/* ── Accounts ── */
+.accountsSection {
+  padding: 10px 0 6px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sectionLabel {
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 14px 6px;
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+
+.accountRow:hover {
+  opacity: 0.75;
+}
+
+.accountRowInactive {
+  opacity: 0.28;
+}
+
+.accountDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.accountInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.accountName {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.accountEmail {
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountCheck {
+  font-size: 10px;
+}
+
+.addAccountBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 14px;
+  width: 100%;
+  text-align: left;
+}
+
+.addAccountBtn:hover {
+  color: var(--text-secondary);
+}
+
+/* ── Labels section ── */
+.modeContent {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.labelsSection {
+  padding: 10px 0;
+}
+
+.labelItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  font-size: 12px;
+  border-radius: 5px;
+  margin: 1px 6px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: background 0.1s;
+}
+
+.labelItem:hover {
+  background: var(--bg-hover);
+}
+
+.labelItemActive {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.labelIcon {
+  font-size: 10px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.labelBadge {
+  margin-left: auto;
+  background: #4f9cf9;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 8px;
+}

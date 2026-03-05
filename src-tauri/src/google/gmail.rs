@@ -327,6 +327,71 @@ pub async fn fetch_thread(
     })
 }
 
+/// Modify labels on all messages in a thread.
+async fn modify_thread_labels(
+    creds: &OAuthCredentials,
+    email: &str,
+    thread_id: &str,
+    add_labels: &[&str],
+    remove_labels: &[&str],
+) -> Result<(), String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!("{GMAIL_BASE_URL}/users/me/threads/{thread_id}/modify");
+    let body = serde_json::json!({
+        "addLabelIds": add_labels,
+        "removeLabelIds": remove_labels,
+    });
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail modify request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail modify failed: {body}"));
+    }
+
+    Ok(())
+}
+
+/// Archive a thread (remove INBOX label).
+pub async fn archive_thread(
+    creds: &OAuthCredentials,
+    email: &str,
+    thread_id: &str,
+) -> Result<(), String> {
+    modify_thread_labels(creds, email, thread_id, &[], &["INBOX"]).await
+}
+
+/// Star or unstar a thread.
+pub async fn star_thread(
+    creds: &OAuthCredentials,
+    email: &str,
+    thread_id: &str,
+    starred: bool,
+) -> Result<(), String> {
+    if starred {
+        modify_thread_labels(creds, email, thread_id, &["STARRED"], &[]).await
+    } else {
+        modify_thread_labels(creds, email, thread_id, &[], &["STARRED"]).await
+    }
+}
+
+/// Mark a thread as read (remove UNREAD label).
+pub async fn mark_read(
+    creds: &OAuthCredentials,
+    email: &str,
+    thread_id: &str,
+) -> Result<(), String> {
+    modify_thread_labels(creds, email, thread_id, &[], &["UNREAD"]).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

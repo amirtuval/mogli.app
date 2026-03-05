@@ -19,6 +19,7 @@ mod google;
 mod keychain;
 mod models;
 mod store;
+mod sync;
 
 use store::AccountStore;
 use tauri::Manager;
@@ -32,6 +33,9 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::auth::list_accounts,
         commands::gmail::get_messages,
         commands::gmail::get_thread,
+        commands::gmail::archive_thread,
+        commands::gmail::star_thread,
+        commands::gmail::mark_read,
     ])
 }
 
@@ -64,6 +68,9 @@ pub fn run() {
             if let Err(e) = store::load_accounts(app.handle()) {
                 log::warn!("Failed to load accounts on startup: {e}");
             }
+
+            // Start background sync (polls Gmail every 2 minutes)
+            sync::start_background_sync(app.handle().clone());
 
             // In debug builds, prefix the window title so dev is visually distinct
             #[cfg(debug_assertions)]
