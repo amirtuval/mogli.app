@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { listen } from '@tauri-apps/api/event'
 import type { Account } from './types/models'
-import { useUIStore } from './store/uiStore'
+import { useUIStore, initTheme } from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
 import { useMessages } from './hooks/useMessages'
@@ -122,9 +122,11 @@ function AppShell() {
 }
 
 function App() {
-  // Apply default theme on mount
+  // Load persisted theme from backend store, then apply CSS vars
   useEffect(() => {
+    // Apply default immediately, then override with persisted value
     applyTheme(useUIStore.getState().theme)
+    initTheme()
   }, [])
 
   return (

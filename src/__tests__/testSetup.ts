@@ -6,8 +6,9 @@ import { vi } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 
 // Mock @tauri-apps/api/core
+// Default returns a resolved Promise so .catch() chains work (e.g. uiStore setTheme)
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn(() => Promise.resolve()),
 }))
 
 // Mock @tauri-apps/api/event

@@ -31,6 +31,8 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::auth::add_account,
         commands::auth::remove_account,
         commands::auth::list_accounts,
+        commands::auth::load_theme,
+        commands::auth::save_theme,
         commands::gmail::get_messages,
         commands::gmail::get_thread,
         commands::gmail::archive_thread,

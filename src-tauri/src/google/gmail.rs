@@ -392,6 +392,92 @@ pub async fn mark_read(
     modify_thread_labels(creds, email, thread_id, &[], &["UNREAD"]).await
 }
 
+// --- Incremental sync via history.list ---
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryListResponse {
+    history: Option<Vec<HistoryRecord>>,
+    history_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryRecord {
+    messages_added: Option<Vec<HistoryMessageAdded>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryMessageAdded {
+    #[allow(dead_code)]
+    message: MessageRef,
+}
+
+/// Result of an incremental sync check via `history.list`.
+pub struct HistorySyncResult {
+    /// Whether new messages were added since the last sync.
+    pub has_new_messages: bool,
+    /// The new `historyId` to store for next sync.
+    pub new_history_id: String,
+}
+
+/// Check for new messages since `start_history_id` using Gmail's history API.
+///
+/// Returns `Ok(None)` if the `historyId` is too old (Google returns 404),
+/// in which case the caller should fall back to a full sync.
+pub async fn fetch_history(
+    creds: &OAuthCredentials,
+    email: &str,
+    start_history_id: &str,
+) -> Result<Option<HistorySyncResult>, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!(
+        "{GMAIL_BASE_URL}/users/me/history?startHistoryId={start_history_id}&historyTypes=messageAdded&labelId=INBOX"
+    );
+
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail history request failed: {e}"))?;
+
+    // 404 means the historyId is too old — caller should do full sync
+    if resp.status().as_u16() == 404 {
+        return Ok(None);
+    }
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail history.list failed: {body}"));
+    }
+
+    let data: HistoryListResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse history response: {e}"))?;
+
+    let has_new_messages = data.history.as_ref().is_some_and(|records| {
+        records.iter().any(|r| {
+            r.messages_added
+                .as_ref()
+                .is_some_and(|added| !added.is_empty())
+        })
+    });
+
+    let new_history_id = data
+        .history_id
+        .unwrap_or_else(|| start_history_id.to_string());
+
+    Ok(Some(HistorySyncResult {
+        has_new_messages,
+        new_history_id,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,6 +602,59 @@ mod tests {
         let (html, text) = extract_body(&part);
         assert!(html.is_some());
         assert!(text.is_some());
+    }
+
+    #[test]
+    fn test_multi_account_merge_sort() {
+        // Simulate messages from two different accounts, merged and sorted by date desc
+        let mut messages = vec![
+            MessageMeta {
+                id: "m1".to_string(),
+                thread_id: "t1".to_string(),
+                account_id: "account-work".to_string(),
+                from: "alice@work.com".to_string(),
+                subject: "Work email".to_string(),
+                snippet: "...".to_string(),
+                date: 1700000100,
+                unread: true,
+                starred: false,
+                labels: vec!["INBOX".to_string()],
+            },
+            MessageMeta {
+                id: "m2".to_string(),
+                thread_id: "t2".to_string(),
+                account_id: "account-personal".to_string(),
+                from: "bob@personal.com".to_string(),
+                subject: "Personal email".to_string(),
+                snippet: "...".to_string(),
+                date: 1700000300, // newest
+                unread: false,
+                starred: true,
+                labels: vec!["INBOX".to_string()],
+            },
+            MessageMeta {
+                id: "m3".to_string(),
+                thread_id: "t3".to_string(),
+                account_id: "account-work".to_string(),
+                from: "charlie@work.com".to_string(),
+                subject: "Another work email".to_string(),
+                snippet: "...".to_string(),
+                date: 1700000200,
+                unread: true,
+                starred: false,
+                labels: vec!["INBOX".to_string()],
+            },
+        ];
+
+        // Same sort logic as get_messages command
+        messages.sort_by(|a, b| b.date.cmp(&a.date));
+
+        assert_eq!(messages[0].id, "m2"); // newest (300)
+        assert_eq!(messages[0].account_id, "account-personal");
+        assert_eq!(messages[1].id, "m3"); // middle (200)
+        assert_eq!(messages[1].account_id, "account-work");
+        assert_eq!(messages[2].id, "m1"); // oldest (100)
+        assert_eq!(messages[2].account_id, "account-work");
     }
 
     #[test]
