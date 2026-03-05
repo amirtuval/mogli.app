@@ -48,10 +48,7 @@ export default function EmailList({
   const selectedThreadId = useUIStore((s) => s.selectedThreadId)
   const setSelectedThreadId = useUIStore((s) => s.setSelectedThreadId)
 
-  const accountMap = useMemo(
-    () => new Map(accounts.map((a) => [a.id, a])),
-    [accounts],
-  )
+  const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
 
   const labelName = useMemo(() => {
     const labels: Record<string, string> = {
@@ -108,9 +105,7 @@ export default function EmailList({
             >
               <div className={styles.rowContent}>
                 <div className={styles.senderLine}>
-                  <span
-                    className={`${styles.sender} ${email.unread ? styles.senderUnread : ''}`}
-                  >
+                  <span className={`${styles.sender} ${email.unread ? styles.senderUnread : ''}`}>
                     {email.from}
                   </span>
                   {email.starred && <span className={styles.starIcon}>★</span>}

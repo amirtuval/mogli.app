@@ -52,6 +52,17 @@ function AppShell() {
     }
   }, [])
 
+  // Resolve active account objects (must be before early return — hooks are unconditional)
+  const activeAccountObjects = useMemo(
+    () => accounts.filter((a) => activeAccounts.includes(a.id)),
+    [accounts, activeAccounts],
+  )
+
+  const unreadCount = useMemo(
+    () => messages?.filter((m) => m.unread && activeAccounts.includes(m.account_id)).length ?? 0,
+    [messages, activeAccounts],
+  )
+
   // Show welcome page if no accounts
   if (accounts.length === 0) {
     return (
@@ -63,18 +74,6 @@ function AppShell() {
       />
     )
   }
-
-  // Resolve active account objects
-  const activeAccountObjects = useMemo(
-    () => accounts.filter((a) => activeAccounts.includes(a.id)),
-    [accounts, activeAccounts],
-  )
-
-  const unreadCount = useMemo(
-    () =>
-      messages?.filter((m) => m.unread && activeAccounts.includes(m.account_id)).length ?? 0,
-    [messages, activeAccounts],
-  )
 
   return (
     <div
@@ -100,11 +99,7 @@ function AppShell() {
         {activeView === 'mail' && (
           <>
             <TopBar activeAccounts={activeAccountObjects} />
-            <MailView
-              accounts={accounts}
-              messages={messages}
-              isLoading={messagesLoading}
-            />
+            <MailView accounts={accounts} messages={messages} isLoading={messagesLoading} />
           </>
         )}
         {activeView === 'calendar' && (

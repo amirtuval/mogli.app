@@ -63,10 +63,7 @@ export default function WelcomePage({ onContinue }: WelcomePageProps) {
         </button>
 
         {connectedAccounts.length > 0 && (
-          <button
-            onClick={() => onContinue(connectedAccounts)}
-            className={styles.continueBtn}
-          >
+          <button onClick={() => onContinue(connectedAccounts)} className={styles.continueBtn}>
             Continue to Mogly →
           </button>
         )}

@@ -21,10 +21,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
   const accountId = selectedMessage?.account_id ?? null
   const { data: thread, isLoading } = useThread(accountId, selectedThreadId)
 
-  const accountMap = useMemo(
-    () => new Map(accounts.map((a) => [a.id, a])),
-    [accounts],
-  )
+  const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
 
   const handleArchive = async () => {
     if (!accountId || !selectedThreadId) return
@@ -92,9 +89,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
           </div>
           <div>
             <div className={styles.senderName}>{message.from}</div>
-            <div className={styles.senderMeta}>
-              to me · via {acct?.email ?? 'unknown'}
-            </div>
+            <div className={styles.senderMeta}>to me · via {acct?.email ?? 'unknown'}</div>
           </div>
           <div className={styles.senderTime}>
             {format(new Date(message.date * 1000), 'MMM d, HH:mm')}

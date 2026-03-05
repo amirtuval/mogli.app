@@ -65,9 +65,7 @@ async fn sync_all_accounts(app: &AppHandle) {
         }
     }
 
-    if found_new {
-        if let Err(e) = app.emit("mail:new", ()) {
-            error!("Background sync: failed to emit event: {e}");
-        }
+    if found_new && let Err(e) = app.emit("mail:new", ()) {
+        error!("Background sync: failed to emit event: {e}");
     }
 }
