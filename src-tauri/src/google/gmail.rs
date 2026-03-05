@@ -1,0 +1,497 @@
+use std::fmt::Write as _;
+
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use serde::Deserialize;
+
+use crate::google::oauth::{get_valid_token, OAuthCredentials};
+use crate::models::{Attachment, Message, MessageMeta, Thread};
+
+const GMAIL_BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1";
+
+// --- Gmail API response types ---
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListMessagesResponse {
+    messages: Option<Vec<MessageRef>>,
+    // next_page_token will be added back for pagination in Phase 5
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MessageRef {
+    id: String,
+    // thread_id will be added back when thread grouping is implemented
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GmailMessage {
+    id: String,
+    thread_id: String,
+    label_ids: Option<Vec<String>>,
+    snippet: Option<String>,
+    internal_date: Option<String>,
+    payload: Option<MessagePart>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MessagePart {
+    mime_type: Option<String>,
+    headers: Option<Vec<Header>>,
+    body: Option<MessageBody>,
+    parts: Option<Vec<MessagePart>>,
+    filename: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Header {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MessageBody {
+    attachment_id: Option<String>,
+    size: Option<u64>,
+    data: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GmailThread {
+    id: String,
+    messages: Option<Vec<GmailMessage>>,
+}
+
+// --- Helper functions ---
+
+fn get_header(headers: &[Header], name: &str) -> String {
+    headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(name))
+        .map(|h| h.value.clone())
+        .unwrap_or_default()
+}
+
+fn decode_base64url(data: &str) -> Option<String> {
+    URL_SAFE_NO_PAD
+        .decode(data)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+}
+
+/// Recursively extract body text/html from MIME parts.
+fn extract_body(part: &MessagePart) -> (Option<String>, Option<String>) {
+    let mime = part.mime_type.as_deref().unwrap_or("");
+
+    match mime {
+        "text/html" => {
+            let html = part
+                .body
+                .as_ref()
+                .and_then(|b| b.data.as_deref())
+                .and_then(decode_base64url);
+            (html, None)
+        }
+        "text/plain" => {
+            let text = part
+                .body
+                .as_ref()
+                .and_then(|b| b.data.as_deref())
+                .and_then(decode_base64url);
+            (None, text)
+        }
+        _ if mime.starts_with("multipart/") => {
+            let mut html = None;
+            let mut text = None;
+            if let Some(parts) = &part.parts {
+                for sub in parts {
+                    let (h, t) = extract_body(sub);
+                    if h.is_some() {
+                        html = h;
+                    }
+                    if t.is_some() {
+                        text = t;
+                    }
+                }
+            }
+            (html, text)
+        }
+        _ => (None, None),
+    }
+}
+
+/// Extract attachments from MIME parts.
+fn extract_attachments(part: &MessagePart) -> Vec<Attachment> {
+    let mut attachments = Vec::new();
+    let filename = part.filename.as_deref().unwrap_or("");
+
+    if !filename.is_empty()
+        && let Some(body) = &part.body
+        && let Some(att_id) = &body.attachment_id
+    {
+        attachments.push(Attachment {
+            id: att_id.clone(),
+            filename: filename.to_string(),
+            mime_type: part.mime_type.clone().unwrap_or_default(),
+            size: body.size.unwrap_or(0),
+        });
+    }
+
+    if let Some(parts) = &part.parts {
+        for sub in parts {
+            attachments.extend(extract_attachments(sub));
+        }
+    }
+
+    attachments
+}
+
+fn parse_message_meta(msg: &GmailMessage, account_id: &str) -> MessageMeta {
+    let headers = msg
+        .payload
+        .as_ref()
+        .and_then(|p| p.headers.as_ref())
+        .map_or(&[] as &[Header], Vec::as_slice);
+
+    let labels = msg.label_ids.clone().unwrap_or_default();
+
+    MessageMeta {
+        id: msg.id.clone(),
+        thread_id: msg.thread_id.clone(),
+        account_id: account_id.to_string(),
+        from: get_header(headers, "From"),
+        subject: get_header(headers, "Subject"),
+        snippet: msg.snippet.clone().unwrap_or_default(),
+        date: msg
+            .internal_date
+            .as_deref()
+            .and_then(|d| d.parse::<i64>().ok())
+            .map_or(0, |ms| ms / 1000), // Gmail uses milliseconds
+        unread: labels.contains(&"UNREAD".to_string()),
+        starred: labels.contains(&"STARRED".to_string()),
+        labels,
+    }
+}
+
+fn parse_full_message(msg: &GmailMessage) -> Message {
+    let headers = msg
+        .payload
+        .as_ref()
+        .and_then(|p| p.headers.as_ref())
+        .map_or(&[] as &[Header], Vec::as_slice);
+
+    let (body_html, body_text) = msg
+        .payload
+        .as_ref()
+        .map_or((None, None), extract_body);
+
+    let attachments = msg
+        .payload
+        .as_ref()
+        .map_or_else(Vec::new, extract_attachments);
+
+    let to_header = get_header(headers, "To");
+    let to: Vec<String> = to_header
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    Message {
+        id: msg.id.clone(),
+        from: get_header(headers, "From"),
+        to,
+        subject: get_header(headers, "Subject"),
+        body_html,
+        body_text,
+        date: msg
+            .internal_date
+            .as_deref()
+            .and_then(|d| d.parse::<i64>().ok())
+            .map_or(0, |ms| ms / 1000),
+        attachments,
+    }
+}
+
+// --- Public API functions ---
+
+/// Fetch message metadata for a single account.
+pub async fn fetch_messages(
+    creds: &OAuthCredentials,
+    account_id: &str,
+    email: &str,
+    label: &str,
+    page_token: Option<&str>,
+) -> Result<Vec<MessageMeta>, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    // List message IDs
+    let mut url = format!("{GMAIL_BASE_URL}/users/me/messages?labelIds={label}&maxResults=50");
+    if let Some(pt) = page_token {
+        let _ = write!(url, "&pageToken={pt}");
+    }
+
+    let list_resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail list request failed: {e}"))?;
+
+    if !list_resp.status().is_success() {
+        let body = list_resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail list failed: {body}"));
+    }
+
+    let list_data: ListMessagesResponse = list_resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse message list: {e}"))?;
+
+    let msg_refs = list_data.messages.unwrap_or_default();
+    if msg_refs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Fetch metadata for each message
+    let mut messages = Vec::with_capacity(msg_refs.len());
+    for msg_ref in &msg_refs {
+        let msg_url = format!(
+            "{GMAIL_BASE_URL}/users/me/messages/{}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
+            msg_ref.id
+        );
+        let msg_resp = client
+            .get(&msg_url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| format!("Gmail get message failed: {e}"))?;
+
+        if msg_resp.status().is_success() {
+            let gmail_msg: GmailMessage = msg_resp
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse message: {e}"))?;
+            messages.push(parse_message_meta(&gmail_msg, account_id));
+        }
+    }
+
+    // Sort by date descending
+    messages.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(messages)
+}
+
+/// Fetch a full thread with message bodies.
+pub async fn fetch_thread(
+    creds: &OAuthCredentials,
+    account_id: &str,
+    email: &str,
+    thread_id: &str,
+) -> Result<Thread, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!("{GMAIL_BASE_URL}/users/me/threads/{thread_id}?format=full");
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail thread request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail thread fetch failed: {body}"));
+    }
+
+    let gmail_thread: GmailThread = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse thread: {e}"))?;
+
+    let messages: Vec<Message> = gmail_thread
+        .messages
+        .unwrap_or_default()
+        .iter()
+        .map(parse_full_message)
+        .collect();
+
+    Ok(Thread {
+        id: gmail_thread.id,
+        account_id: account_id.to_string(),
+        messages,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_header() {
+        let headers = vec![
+            Header {
+                name: "From".to_string(),
+                value: "alice@example.com".to_string(),
+            },
+            Header {
+                name: "Subject".to_string(),
+                value: "Hello World".to_string(),
+            },
+        ];
+        assert_eq!(get_header(&headers, "From"), "alice@example.com");
+        assert_eq!(get_header(&headers, "subject"), "Hello World"); // case-insensitive
+        assert_eq!(get_header(&headers, "Missing"), "");
+    }
+
+    #[test]
+    fn test_decode_base64url() {
+        // "Hello World" in base64url (no padding)
+        let encoded = "SGVsbG8gV29ybGQ";
+        assert_eq!(decode_base64url(encoded), Some("Hello World".to_string()));
+    }
+
+    #[test]
+    fn test_decode_base64url_invalid() {
+        assert!(decode_base64url("!!!invalid!!!").is_none());
+    }
+
+    #[test]
+    fn test_parse_message_meta() {
+        let msg = GmailMessage {
+            id: "msg1".to_string(),
+            thread_id: "thread1".to_string(),
+            label_ids: Some(vec!["INBOX".to_string(), "UNREAD".to_string()]),
+            snippet: Some("Hey there...".to_string()),
+            internal_date: Some("1700000000000".to_string()), // milliseconds
+            payload: Some(MessagePart {
+                mime_type: None,
+                headers: Some(vec![
+                    Header {
+                        name: "From".to_string(),
+                        value: "bob@example.com".to_string(),
+                    },
+                    Header {
+                        name: "Subject".to_string(),
+                        value: "Test Subject".to_string(),
+                    },
+                ]),
+                body: None,
+                parts: None,
+                filename: None,
+            }),
+        };
+
+        let meta = parse_message_meta(&msg, "account-1");
+        assert_eq!(meta.id, "msg1");
+        assert_eq!(meta.thread_id, "thread1");
+        assert_eq!(meta.account_id, "account-1");
+        assert_eq!(meta.from, "bob@example.com");
+        assert_eq!(meta.subject, "Test Subject");
+        assert_eq!(meta.snippet, "Hey there...");
+        assert_eq!(meta.date, 1700000000); // converted from ms to s
+        assert!(meta.unread);
+        assert!(!meta.starred);
+    }
+
+    #[test]
+    fn test_extract_body_plain_text() {
+        let part = MessagePart {
+            mime_type: Some("text/plain".to_string()),
+            headers: None,
+            body: Some(MessageBody {
+                attachment_id: None,
+                size: Some(11),
+                data: Some("SGVsbG8gV29ybGQ".to_string()), // "Hello World"
+            }),
+            parts: None,
+            filename: None,
+        };
+        let (html, text) = extract_body(&part);
+        assert!(html.is_none());
+        assert_eq!(text, Some("Hello World".to_string()));
+    }
+
+    #[test]
+    fn test_extract_body_multipart() {
+        let part = MessagePart {
+            mime_type: Some("multipart/alternative".to_string()),
+            headers: None,
+            body: None,
+            parts: Some(vec![
+                MessagePart {
+                    mime_type: Some("text/plain".to_string()),
+                    headers: None,
+                    body: Some(MessageBody {
+                        attachment_id: None,
+                        size: Some(5),
+                        data: Some("SGVsbG8".to_string()), // "Hello"
+                    }),
+                    parts: None,
+                    filename: None,
+                },
+                MessagePart {
+                    mime_type: Some("text/html".to_string()),
+                    headers: None,
+                    body: Some(MessageBody {
+                        attachment_id: None,
+                        size: Some(12),
+                        data: Some("PGI-SGk8L2I-".to_string()), // "<b>Hi</b>"
+                    }),
+                    parts: None,
+                    filename: None,
+                },
+            ]),
+            filename: None,
+        };
+        let (html, text) = extract_body(&part);
+        assert!(html.is_some());
+        assert!(text.is_some());
+    }
+
+    #[test]
+    fn test_extract_attachments() {
+        let part = MessagePart {
+            mime_type: Some("multipart/mixed".to_string()),
+            headers: None,
+            body: None,
+            parts: Some(vec![
+                MessagePart {
+                    mime_type: Some("text/plain".to_string()),
+                    headers: None,
+                    body: Some(MessageBody {
+                        attachment_id: None,
+                        size: None,
+                        data: Some("dGVzdA".to_string()),
+                    }),
+                    parts: None,
+                    filename: None,
+                },
+                MessagePart {
+                    mime_type: Some("application/pdf".to_string()),
+                    headers: None,
+                    body: Some(MessageBody {
+                        attachment_id: Some("att-1".to_string()),
+                        size: Some(12345),
+                        data: None,
+                    }),
+                    parts: None,
+                    filename: Some("document.pdf".to_string()),
+                },
+            ]),
+            filename: None,
+        };
+        let atts = extract_attachments(&part);
+        assert_eq!(atts.len(), 1);
+        assert_eq!(atts[0].filename, "document.pdf");
+        assert_eq!(atts[0].mime_type, "application/pdf");
+        assert_eq!(atts[0].size, 12345);
+    }
+}

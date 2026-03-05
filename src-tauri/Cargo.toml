@@ -1,0 +1,40 @@
+[package]
+name = "mogly"
+version = "0.1.0"
+description = "Unified Gmail & Google Calendar desktop app"
+authors = ["you"]
+license = "MIT"
+edition = "2024"
+rust-version = "1.94.0"
+
+[lib]
+name = "mogly_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-log = "2"
+tauri-plugin-store = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-shell = "2"
+tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript"] }
+specta = { version = "=2.0.0-rc.22", features = ["derive"] }
+specta-typescript = "0.0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+uuid = { version = "1", features = ["v4"] }
+log = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+url = "2"
+open = "5"
+base64 = "0.22"
+urlencoding = "2"
+
+[dev-dependencies]
+mockito = "1"
