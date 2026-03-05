@@ -221,10 +221,7 @@ Connection: close
 }
 
 /// Refresh the access token if expired. Returns a valid access token.
-pub async fn get_valid_token(
-    creds: &OAuthCredentials,
-    email: &str,
-) -> Result<String, String> {
+pub async fn get_valid_token(creds: &OAuthCredentials, email: &str) -> Result<String, String> {
     let mut tokens = keychain::get_tokens(email)?;
 
     if !tokens.is_expired() {

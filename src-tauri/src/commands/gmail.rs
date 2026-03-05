@@ -18,7 +18,10 @@ pub async fn get_messages(
 
     let state = app.state::<AccountStore>();
     let accounts = {
-        let guard = state.accounts.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let guard = state
+            .accounts
+            .lock()
+            .map_err(|e| format!("Lock error: {e}"))?;
         guard
             .iter()
             .filter(|a| account_ids.contains(&a.id))
@@ -62,7 +65,10 @@ pub async fn get_thread(
 
     let state = app.state::<AccountStore>();
     let email = {
-        let guard = state.accounts.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let guard = state
+            .accounts
+            .lock()
+            .map_err(|e| format!("Lock error: {e}"))?;
         guard
             .iter()
             .find(|a| a.id == account_id)

@@ -22,7 +22,7 @@ mod store;
 
 use store::AccountStore;
 use tauri::Manager;
-use tauri_specta::{collect_commands, Builder};
+use tauri_specta::{Builder, collect_commands};
 
 /// Create the tauri-specta builder with all commands registered.
 fn create_builder() -> Builder<tauri::Wry> {

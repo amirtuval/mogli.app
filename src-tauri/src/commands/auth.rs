@@ -2,7 +2,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::google::oauth::{self, OAuthCredentials};
 use crate::keychain;
-use crate::models::{color_for_index, Account};
+use crate::models::{Account, color_for_index};
 use crate::store::{self, AccountStore};
 
 /// Trigger the OAuth flow and add a new Google account.
@@ -32,7 +32,10 @@ pub async fn remove_account(app: AppHandle, account_id: String) -> Result<(), St
     // Find the account email before removing
     let state = app.state::<AccountStore>();
     let email = {
-        let guard = state.accounts.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let guard = state
+            .accounts
+            .lock()
+            .map_err(|e| format!("Lock error: {e}"))?;
         guard
             .iter()
             .find(|a| a.id == account_id)

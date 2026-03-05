@@ -1,10 +1,10 @@
 use std::fmt::Write as _;
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::Deserialize;
 
-use crate::google::oauth::{get_valid_token, OAuthCredentials};
+use crate::google::oauth::{OAuthCredentials, get_valid_token};
 use crate::models::{Attachment, Message, MessageMeta, Thread};
 
 const GMAIL_BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1";
@@ -186,10 +186,7 @@ fn parse_full_message(msg: &GmailMessage) -> Message {
         .and_then(|p| p.headers.as_ref())
         .map_or(&[] as &[Header], Vec::as_slice);
 
-    let (body_html, body_text) = msg
-        .payload
-        .as_ref()
-        .map_or((None, None), extract_body);
+    let (body_html, body_text) = msg.payload.as_ref().map_or((None, None), extract_body);
 
     let attachments = msg
         .payload

@@ -39,7 +39,10 @@ pub fn load_accounts(app: &AppHandle) -> Result<Vec<Account>, String> {
 
     // Sync to in-memory state
     let state = app.state::<AccountStore>();
-    let mut guard = state.accounts.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut guard = state
+        .accounts
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
     guard.clone_from(&accounts);
 
     Ok(accounts)
@@ -61,7 +64,10 @@ pub fn save_accounts(app: &AppHandle, accounts: &[Account]) -> Result<(), String
 /// Add an account to both in-memory state and persistent store.
 pub fn add_account(app: &AppHandle, account: Account) -> Result<(), String> {
     let state = app.state::<AccountStore>();
-    let mut guard = state.accounts.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut guard = state
+        .accounts
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
     guard.push(account);
     save_accounts(app, &guard)?;
     Ok(())
@@ -70,7 +76,10 @@ pub fn add_account(app: &AppHandle, account: Account) -> Result<(), String> {
 /// Remove an account by ID from both in-memory state and persistent store.
 pub fn remove_account(app: &AppHandle, account_id: &str) -> Result<(), String> {
     let state = app.state::<AccountStore>();
-    let mut guard = state.accounts.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut guard = state
+        .accounts
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
     guard.retain(|a| a.id != account_id);
     save_accounts(app, &guard)?;
     Ok(())
@@ -79,7 +88,10 @@ pub fn remove_account(app: &AppHandle, account_id: &str) -> Result<(), String> {
 /// Get the current account count (for color assignment).
 pub fn account_count(app: &AppHandle) -> Result<usize, String> {
     let state = app.state::<AccountStore>();
-    let guard = state.accounts.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let guard = state
+        .accounts
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
     Ok(guard.len())
 }
 
