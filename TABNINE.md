@@ -114,3 +114,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR:
 3. `cargo test --all`
 4. `yarn test`
 5. `npx tsc --noEmit`
+
+## Git workflow
+
+- **Never amend commits or force-push.** Always create new commits and push normally. Amending/force-pushing breaks other worktrees and machines that have already pulled the branch.
