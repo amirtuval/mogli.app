@@ -9,7 +9,7 @@ use crate::store::{self, AccountStore};
 #[tauri::command]
 #[specta::specta]
 pub async fn add_account(app: AppHandle) -> Result<Account, String> {
-    let creds = OAuthCredentials::from_env()?;
+    let creds = OAuthCredentials::load()?;
     let result = oauth::run_oauth_flow(&creds).await?;
 
     let count = store::account_count(&app)?;

@@ -73,13 +73,16 @@ npx tsc --noEmit            # TypeScript typecheck
 
 Dev and production builds use completely separate storage so the app can be developed and used as a daily driver on the same machine:
 
-| Resource        | Debug (`yarn tauri dev`)    | Release (`yarn tauri build`) |
-| --------------- | --------------------------- | ---------------------------- |
-| Keychain service | `mogly-dev`                | `mogly`                      |
-| Store filename  | `accounts.dev.json`         | `accounts.json`              |
-| Window title    | `[DEV] Mogly`               | `Mogly`                      |
+| Resource         | Debug (`yarn tauri dev`)           | Release (`yarn tauri build`)          |
+| ---------------- | ---------------------------------- | ------------------------------------- |
+| OAuth credentials | Runtime env vars (`.env` file)    | Compile-time `env!()` (CI secrets)    |
+| Keychain service | `mogly-dev`                        | `mogly`                               |
+| Store filename   | `accounts.dev.json`                | `accounts.json`                       |
+| Window title     | `[DEV] Mogly`                      | `Mogly`                               |
 
 Switching is automatic via `cfg(debug_assertions)` — no env vars or flags needed.
+
+Create **two** OAuth client IDs (both Desktop app type) in the same GCP project: one for dev (`.env`), one for release (CI secrets `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`).
 
 ## Key conventions
 

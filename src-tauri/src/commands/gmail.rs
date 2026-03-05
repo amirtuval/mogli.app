@@ -14,7 +14,7 @@ pub async fn get_messages(
     label: String,
     page_token: Option<String>,
 ) -> Result<Vec<MessageMeta>, String> {
-    let creds = OAuthCredentials::from_env()?;
+    let creds = OAuthCredentials::load()?;
 
     let state = app.state::<AccountStore>();
     let accounts = {
@@ -61,7 +61,7 @@ pub async fn get_thread(
     account_id: String,
     thread_id: String,
 ) -> Result<Thread, String> {
-    let creds = OAuthCredentials::from_env()?;
+    let creds = OAuthCredentials::load()?;
 
     let state = app.state::<AccountStore>();
     let email = {

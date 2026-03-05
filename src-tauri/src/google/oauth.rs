@@ -21,15 +21,32 @@ pub struct OAuthCredentials {
 }
 
 impl OAuthCredentials {
-    pub fn from_env() -> Result<Self, String> {
-        let client_id =
-            std::env::var("GOOGLE_CLIENT_ID").map_err(|_| "GOOGLE_CLIENT_ID not set")?;
-        let client_secret =
-            std::env::var("GOOGLE_CLIENT_SECRET").map_err(|_| "GOOGLE_CLIENT_SECRET not set")?;
-        Ok(Self {
-            client_id,
-            client_secret,
-        })
+    /// Load OAuth credentials.
+    ///
+    /// - **Debug builds:** reads `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+    ///   from environment variables at runtime (via `.env` file).
+    /// - **Release builds:** embeds the credentials at compile time via `env!()`,
+    ///   sourced from CI secrets or the build environment.
+    pub fn load() -> Result<Self, String> {
+        #[cfg(debug_assertions)]
+        {
+            let client_id =
+                std::env::var("GOOGLE_CLIENT_ID").map_err(|_| "GOOGLE_CLIENT_ID not set")?;
+            let client_secret = std::env::var("GOOGLE_CLIENT_SECRET")
+                .map_err(|_| "GOOGLE_CLIENT_SECRET not set")?;
+            Ok(Self {
+                client_id,
+                client_secret,
+            })
+        }
+
+        #[cfg(not(debug_assertions))]
+        {
+            Ok(Self {
+                client_id: env!("GOOGLE_CLIENT_ID").to_string(),
+                client_secret: env!("GOOGLE_CLIENT_SECRET").to_string(),
+            })
+        }
     }
 }
 
