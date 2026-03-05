@@ -42,6 +42,12 @@ fn create_builder() -> Builder<tauri::Wry> {
 /// Panics if the Tauri runtime fails to initialise (e.g. missing webview).
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // In debug builds, load .env from the project root for OAuth credentials
+    #[cfg(debug_assertions)]
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: failed to load .env file: {e}");
+    }
+
     let builder = create_builder();
 
     tauri::Builder::default()
