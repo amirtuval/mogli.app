@@ -18,6 +18,7 @@ mod commands;
 mod google;
 mod keychain;
 mod models;
+mod notify;
 mod reminders;
 mod store;
 mod sync;

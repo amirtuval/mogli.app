@@ -1,9 +1,7 @@
 use std::time::Duration;
 
 use log::{error, warn};
-use tauri::plugin::PermissionState;
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_notification::NotificationExt;
 use tokio::time::interval;
 
 use crate::google::gmail as gmail_api;
@@ -158,16 +156,6 @@ async fn notify_new_messages(
     email: &str,
     new_message_ids: &[String],
 ) {
-    // Check if notifications are permitted
-    let granted = app
-        .notification()
-        .permission_state()
-        .map(|s| s == PermissionState::Granted)
-        .unwrap_or(false);
-    if !granted {
-        return;
-    }
-
     // Only fetch metadata for the specific new messages (up to limit)
     let ids_to_fetch: Vec<String> = new_message_ids
         .iter()
@@ -185,14 +173,9 @@ async fn notify_new_messages(
         };
 
     for msg in &messages {
-        // Fire OS notification
-        if let Err(e) = app
-            .notification()
-            .builder()
-            .title(&msg.from)
-            .body(&msg.subject)
-            .show()
-        {
+        // Fire OS notification via notify-rust (bypasses Tauri plugin's broken
+        // async spawn on Windows — see crate::notify module docs).
+        if let Err(e) = crate::notify::send(&msg.from, &msg.subject) {
             warn!("Failed to send email notification: {e}");
         }
 
