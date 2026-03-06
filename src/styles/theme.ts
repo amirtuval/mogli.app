@@ -15,6 +15,8 @@ export interface ThemeVars {
   '--text-muted': string
   '--text-faint': string
   '--scrollbar': string
+  '--bg-warning': string
+  '--text-on-warning': string
 }
 
 export const themes: Record<Theme, ThemeVars> = {
@@ -33,6 +35,8 @@ export const themes: Record<Theme, ThemeVars> = {
     '--text-muted': '#8a8a85',
     '--text-faint': '#b8b8b2',
     '--scrollbar': '#c4c4be',
+    '--bg-warning': '#fff3cd',
+    '--text-on-warning': '#664d03',
   },
   dark: {
     '--bg-app': '#2a2a2e',
@@ -49,6 +53,8 @@ export const themes: Record<Theme, ThemeVars> = {
     '--text-muted': '#66666c',
     '--text-faint': '#3a3a40',
     '--scrollbar': '#3a3a40',
+    '--bg-warning': '#4a3800',
+    '--text-on-warning': '#ffc107',
   },
   ultraDark: {
     '--bg-app': '#0c0c0e',
@@ -65,6 +71,8 @@ export const themes: Record<Theme, ThemeVars> = {
     '--text-muted': '#383839',
     '--text-faint': '#202021',
     '--scrollbar': '#1c1c1f',
+    '--bg-warning': '#3a2d00',
+    '--text-on-warning': '#e0a800',
   },
 }
 

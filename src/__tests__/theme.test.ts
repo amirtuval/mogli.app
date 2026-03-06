@@ -28,6 +28,8 @@ describe('theme', () => {
       '--text-muted',
       '--text-faint',
       '--scrollbar',
+      '--bg-warning',
+      '--text-on-warning',
     ]
 
     for (const themeName of Object.keys(themes) as Theme[]) {

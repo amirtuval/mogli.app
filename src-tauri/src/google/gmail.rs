@@ -301,6 +301,61 @@ pub async fn fetch_messages(
     Ok(messages)
 }
 
+/// Fetch metadata for specific message IDs (used by the notification pipe).
+pub async fn fetch_messages_by_ids(
+    creds: &OAuthCredentials,
+    account_id: &str,
+    email: &str,
+    message_ids: &[String],
+) -> Result<Vec<MessageMeta>, String> {
+    if message_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let mut join_set = tokio::task::JoinSet::new();
+    for msg_id in message_ids {
+        let client = client.clone();
+        let token = token.clone();
+        let account_id = account_id.to_string();
+        let msg_id = msg_id.clone();
+        join_set.spawn(async move {
+            let msg_url = format!(
+                "{GMAIL_BASE_URL}/users/me/messages/{msg_id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
+            );
+            let msg_resp = client
+                .get(&msg_url)
+                .bearer_auth(&token)
+                .send()
+                .await
+                .map_err(|e| format!("Gmail get message failed: {e}"))?;
+
+            if !msg_resp.status().is_success() {
+                return Err(format!("Gmail get message {msg_id} failed: {}", msg_resp.status()));
+            }
+
+            let gmail_msg: GmailMessage = msg_resp
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse message: {e}"))?;
+            Ok(parse_message_meta(&gmail_msg, &account_id))
+        });
+    }
+
+    let mut messages = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(meta)) => messages.push(meta),
+            Ok(Err(e)) => log::warn!("Skipping message in notification: {e}"),
+            Err(e) => log::warn!("Message fetch task panicked: {e}"),
+        }
+    }
+
+    Ok(messages)
+}
+
 /// Fetch a full thread with message bodies.
 pub async fn fetch_thread(
     creds: &OAuthCredentials,
@@ -426,14 +481,13 @@ struct HistoryRecord {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct HistoryMessageAdded {
-    #[allow(dead_code)]
     message: MessageRef,
 }
 
 /// Result of an incremental sync check via `history.list`.
 pub struct HistorySyncResult {
-    /// Whether new messages were added since the last sync.
-    pub has_new_messages: bool,
+    /// IDs of messages added since the last sync.
+    pub new_message_ids: Vec<String>,
     /// The new `historyId` to store for next sync.
     pub new_history_id: String,
 }
@@ -476,22 +530,58 @@ pub async fn fetch_history(
         .await
         .map_err(|e| format!("Failed to parse history response: {e}"))?;
 
-    let has_new_messages = data.history.as_ref().is_some_and(|records| {
-        records.iter().any(|r| {
-            r.messages_added
-                .as_ref()
-                .is_some_and(|added| !added.is_empty())
-        })
-    });
+    let new_message_ids: Vec<String> = data
+        .history
+        .unwrap_or_default()
+        .into_iter()
+        .flat_map(|r| r.messages_added.unwrap_or_default())
+        .map(|added| added.message.id)
+        .collect();
 
     let new_history_id = data
         .history_id
         .unwrap_or_else(|| start_history_id.to_string());
 
     Ok(Some(HistorySyncResult {
-        has_new_messages,
+        new_message_ids,
         new_history_id,
     }))
+}
+
+// --- Profile ---
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileResponse {
+    history_id: Option<String>,
+}
+
+/// Fetch the current `historyId` from the Gmail profile.
+///
+/// Used to seed the stored `history_id` on first sync so that subsequent
+/// syncs can use incremental `history.list`.
+pub async fn fetch_profile_history_id(
+    creds: &OAuthCredentials,
+    email: &str,
+) -> Result<String, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!("{GMAIL_BASE_URL}/users/me/profile");
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail profile request failed: {e}"))?;
+
+    let data: ProfileResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Gmail profile: {e}"))?;
+
+    data.history_id
+        .ok_or_else(|| "Gmail profile missing historyId".to_string())
 }
 
 #[cfg(test)]
