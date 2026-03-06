@@ -257,26 +257,42 @@ pub async fn fetch_messages(
         return Ok(Vec::new());
     }
 
-    // Fetch metadata for each message
-    let mut messages = Vec::with_capacity(msg_refs.len());
-    for msg_ref in &msg_refs {
-        let msg_url = format!(
-            "{GMAIL_BASE_URL}/users/me/messages/{}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
-            msg_ref.id
-        );
-        let msg_resp = client
-            .get(&msg_url)
-            .bearer_auth(&token)
-            .send()
-            .await
-            .map_err(|e| format!("Gmail get message failed: {e}"))?;
+    // Fetch metadata for all messages in parallel
+    let mut join_set = tokio::task::JoinSet::new();
+    for msg_ref in msg_refs {
+        let client = client.clone();
+        let token = token.clone();
+        let account_id = account_id.to_string();
+        let msg_id = msg_ref.id;
+        join_set.spawn(async move {
+            let msg_url = format!(
+                "{GMAIL_BASE_URL}/users/me/messages/{msg_id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
+            );
+            let msg_resp = client
+                .get(&msg_url)
+                .bearer_auth(&token)
+                .send()
+                .await
+                .map_err(|e| format!("Gmail get message failed: {e}"))?;
 
-        if msg_resp.status().is_success() {
+            if !msg_resp.status().is_success() {
+                return Err(format!("Gmail get message {msg_id} failed: {}", msg_resp.status()));
+            }
+
             let gmail_msg: GmailMessage = msg_resp
                 .json()
                 .await
                 .map_err(|e| format!("Failed to parse message: {e}"))?;
-            messages.push(parse_message_meta(&gmail_msg, account_id));
+            Ok(parse_message_meta(&gmail_msg, &account_id))
+        });
+    }
+
+    let mut messages = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(meta)) => messages.push(meta),
+            Ok(Err(e)) => log::warn!("Skipping message: {e}"),
+            Err(e) => log::warn!("Message fetch task panicked: {e}"),
         }
     }
 
