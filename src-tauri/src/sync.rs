@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::{error, info, warn};
+use log::{error, warn};
 use tauri::plugin::PermissionState;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
@@ -10,32 +10,33 @@ use crate::google::gmail as gmail_api;
 use crate::google::oauth::OAuthCredentials;
 use crate::store::{self, AccountStore};
 
-const SYNC_INTERVAL_SECS: u64 = 120;
+/// Fast notification pipe — polls `history.list` every 15 seconds.
+/// Lightweight: only checks whether new messages exist, then fires
+/// OS notifications and emits `mail:new` so the frontend refreshes.
+const NOTIFY_INTERVAL_SECS: u64 = 15;
+
 /// Maximum number of new-message notifications per sync cycle (avoid spam).
 const MAX_NOTIFICATIONS_PER_SYNC: usize = 5;
 
-/// Start the background sync task that polls Gmail every 2 minutes.
-/// Uses `history.list` for incremental sync when a `historyId` is available;
-/// falls back to a full `messages.list` check when the `historyId` is missing
-/// or too old (Google returns 404).
-///
-/// Emits `mail:new` event when new messages are detected.
-/// Fires OS notifications for each new message (up to 5 per cycle).
-pub fn start_background_sync(app: AppHandle) {
+/// Start background tasks:
+/// - **Notification pipe** (15 s): lightweight `history.list` poll that fires
+///   OS notifications and emits `mail:new` for instant inbox refresh.
+pub fn start_background_sync(app: &AppHandle) {
+    // Fast notification pipe
+    let notify_app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut ticker = interval(Duration::from_secs(SYNC_INTERVAL_SECS));
+        let mut ticker = interval(Duration::from_secs(NOTIFY_INTERVAL_SECS));
         // Skip the first immediate tick — the frontend fetches on mount
         ticker.tick().await;
 
         loop {
             ticker.tick().await;
-            info!("Background sync: checking for new messages");
-            sync_all_accounts(&app).await;
+            check_all_accounts(&notify_app).await;
         }
     });
 }
 
-async fn sync_all_accounts(app: &AppHandle) {
+async fn check_all_accounts(app: &AppHandle) {
     let creds = match OAuthCredentials::load() {
         Ok(c) => c,
         Err(e) => {
@@ -109,12 +110,15 @@ async fn sync_account(
                     warn!("Failed to update historyId for {email}: {e}");
                 }
 
-                // If new messages, fetch inbox to get their metadata for notifications
-                if result.has_new_messages {
-                    notify_new_messages(creds, app, account_id, email).await;
+                let has_new = !result.new_message_ids.is_empty();
+
+                // Notify only for the newly arrived messages
+                if has_new {
+                    notify_new_messages(creds, app, account_id, email, &result.new_message_ids)
+                        .await;
                 }
 
-                return Ok(result.has_new_messages);
+                return Ok(has_new);
             }
             None => {
                 // historyId too old (404) — fall through to full sync
@@ -146,12 +150,13 @@ struct OpenThread {
     account_id: String,
 }
 
-/// Fetch recent unread messages and fire OS notifications for them.
+/// Fetch metadata for newly arrived messages and fire OS notifications.
 async fn notify_new_messages(
     creds: &OAuthCredentials,
     app: &AppHandle,
     account_id: &str,
     email: &str,
+    new_message_ids: &[String],
 ) {
     // Check if notifications are permitted
     let granted = app
@@ -163,18 +168,23 @@ async fn notify_new_messages(
         return;
     }
 
-    let messages = match gmail_api::fetch_messages(creds, account_id, email, "INBOX", None).await {
-        Ok(m) => m,
-        Err(e) => {
-            warn!("Failed to fetch messages for notification: {e}");
-            return;
-        }
-    };
+    // Only fetch metadata for the specific new messages (up to limit)
+    let ids_to_fetch: Vec<String> = new_message_ids
+        .iter()
+        .take(MAX_NOTIFICATIONS_PER_SYNC)
+        .cloned()
+        .collect();
 
-    let unread: Vec<_> = messages.iter().filter(|m| m.unread).collect();
-    let count = unread.len().min(MAX_NOTIFICATIONS_PER_SYNC);
+    let messages =
+        match gmail_api::fetch_messages_by_ids(creds, account_id, email, &ids_to_fetch).await {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Failed to fetch messages for notification: {e}");
+                return;
+            }
+        };
 
-    for msg in &unread[..count] {
+    for msg in &messages {
         // Fire OS notification
         if let Err(e) = app
             .notification()

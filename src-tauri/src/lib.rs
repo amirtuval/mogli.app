@@ -143,7 +143,7 @@ pub fn run() {
             }
 
             // Start background sync (polls Gmail every 2 minutes)
-            sync::start_background_sync(app.handle().clone());
+            sync::start_background_sync(app.handle());
 
             // Start calendar reminder checks (every 60 seconds)
             reminders::start_calendar_reminders(app.handle().clone());
