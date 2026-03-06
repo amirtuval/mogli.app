@@ -123,7 +123,17 @@ async fn sync_account(
         }
     }
 
-    // Full sync fallback: fetch inbox and check for unread messages
+    // Full sync fallback: seed historyId from profile so next sync uses incremental path.
+    // Don't notify on the initial sync — we'd spam all existing unread messages.
+    match gmail_api::fetch_profile_history_id(creds, email).await {
+        Ok(hid) => {
+            if let Err(e) = store::update_history_id(app, account_id, &hid) {
+                warn!("Failed to seed historyId for {email}: {e}");
+            }
+        }
+        Err(e) => warn!("Failed to fetch profile historyId for {email}: {e}"),
+    }
+
     let messages = gmail_api::fetch_messages(creds, account_id, email, "INBOX", None).await?;
     let has_new = messages.iter().any(|m| m.unread);
     Ok(has_new)

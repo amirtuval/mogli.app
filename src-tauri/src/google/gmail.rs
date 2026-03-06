@@ -494,6 +494,42 @@ pub async fn fetch_history(
     }))
 }
 
+// --- Profile ---
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileResponse {
+    history_id: Option<String>,
+}
+
+/// Fetch the current `historyId` from the Gmail profile.
+///
+/// Used to seed the stored `history_id` on first sync so that subsequent
+/// syncs can use incremental `history.list`.
+pub async fn fetch_profile_history_id(
+    creds: &OAuthCredentials,
+    email: &str,
+) -> Result<String, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!("{GMAIL_BASE_URL}/users/me/profile");
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail profile request failed: {e}"))?;
+
+    let data: ProfileResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Gmail profile: {e}"))?;
+
+    data.history_id
+        .ok_or_else(|| "Gmail profile missing historyId".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
