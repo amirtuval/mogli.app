@@ -9,26 +9,6 @@ export type WeekStartDay = 0 | 1
 
 const VALID_THEMES: Theme[] = ['light', 'dark', 'ultraDark']
 
-/** Detect the locale's first day of week. Returns 0 (Sun) or 1 (Mon). */
-function detectWeekStartDay(): WeekStartDay {
-  try {
-    // Intl.Locale.prototype.weekInfo is available in modern browsers
-    const locale = new Intl.Locale(navigator.language) as Intl.Locale & {
-      weekInfo?: { firstDay: number }
-      getWeekInfo?: () => { firstDay: number }
-    }
-    const info = locale.weekInfo ?? locale.getWeekInfo?.()
-    if (info) {
-      // weekInfo.firstDay: 1=Mon … 7=Sun
-      return info.firstDay === 7 ? 0 : 1
-    }
-  } catch {
-    // Fallback
-  }
-  // Default to Monday (ISO standard)
-  return 1
-}
-
 /**
  * Get the first day of the week containing the given date.
  * `weekStartDay`: 0 = Sunday, 1 = Monday.
@@ -39,7 +19,10 @@ export function getWeekStart(date: Date, weekStartDay: WeekStartDay = 1): string
   const day = d.getDay() // 0=Sun … 6=Sat
   const diff = (day - weekStartDay + 7) % 7
   d.setDate(d.getDate() - diff)
-  return d.toISOString().slice(0, 10)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 /** @deprecated Use getWeekStart instead */
@@ -61,11 +44,10 @@ interface UIState {
   setSelectedThreadId: (threadId: string | null) => void
   setSelectedLabel: (label: string) => void
   setCalendarWeekStart: (start: string) => void
+  setWeekStartDay: (day: WeekStartDay) => void
   navigateWeek: (direction: -1 | 1) => void
   goToToday: () => void
 }
-
-const initialWeekStartDay = detectWeekStartDay()
 
 export const useUIStore = create<UIState>((set, get) => ({
   theme: 'dark',
@@ -73,8 +55,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   activeAccounts: [],
   selectedThreadId: null,
   selectedLabel: 'INBOX',
-  weekStartDay: initialWeekStartDay,
-  calendarWeekStart: getWeekStart(new Date(), initialWeekStartDay),
+  weekStartDay: 1,
+  calendarWeekStart: getWeekStart(new Date(), 1),
 
   setTheme: (theme) => {
     set({ theme })
@@ -94,12 +76,22 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSelectedThreadId: (threadId) => set({ selectedThreadId: threadId }),
   setSelectedLabel: (label) => set({ selectedLabel: label }),
   setCalendarWeekStart: (start) => set({ calendarWeekStart: start }),
+  setWeekStartDay: (day) => {
+    const weekStart = getWeekStart(new Date(), day)
+    set({ weekStartDay: day, calendarWeekStart: weekStart })
+    // Persist to disk (fire-and-forget)
+    invoke('save_week_start_day', { day }).catch((e: unknown) =>
+      console.warn('Failed to persist week start day:', e),
+    )
+  },
   navigateWeek: (direction) =>
     set((state) => {
       const [y, m, d] = state.calendarWeekStart.split('-').map(Number)
-      const date = new Date(Date.UTC(y, m - 1, d + direction * 7))
-      const iso = date.toISOString().slice(0, 10)
-      return { calendarWeekStart: iso }
+      const date = new Date(y, m - 1, d + direction * 7)
+      const yyyy = date.getFullYear()
+      const mm = String(date.getMonth() + 1).padStart(2, '0')
+      const dd = String(date.getDate()).padStart(2, '0')
+      return { calendarWeekStart: `${yyyy}-${mm}-${dd}` }
     }),
   goToToday: () => set({ calendarWeekStart: getWeekStart(new Date(), get().weekStartDay) }),
 }))
@@ -113,5 +105,17 @@ export async function initTheme(): Promise<void> {
     }
   } catch {
     // First launch or store unavailable — keep default
+  }
+}
+
+/** Load the persisted week start day from the backend store and apply it. */
+export async function initWeekStartDay(): Promise<void> {
+  try {
+    const saved = await invoke<number>('load_week_start_day')
+    if (saved === 0 || saved === 1) {
+      useUIStore.getState().setWeekStartDay(saved as WeekStartDay)
+    }
+  } catch {
+    // First launch or store unavailable — keep default (Monday)
   }
 }

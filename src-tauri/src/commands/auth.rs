@@ -70,3 +70,17 @@ pub async fn load_theme(app: AppHandle) -> Result<String, String> {
 pub async fn save_theme(app: AppHandle, theme: String) -> Result<(), String> {
     store::save_theme(&app, &theme)
 }
+
+/// Load the persisted week start day. Returns `1` (Monday) if not set.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_week_start_day(app: AppHandle) -> Result<u8, String> {
+    Ok(store::load_week_start_day(&app)?.unwrap_or(1))
+}
+
+/// Persist the week start day to disk. 0 = Sunday, 1 = Monday.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_week_start_day(app: AppHandle, day: u8) -> Result<(), String> {
+    store::save_week_start_day(&app, day)
+}

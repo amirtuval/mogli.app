@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { listen } from '@tauri-apps/api/event'
 import type { Account } from './types/models'
-import { useUIStore, initTheme } from './store/uiStore'
+import { useUIStore, initTheme, initWeekStartDay } from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
 import { useMessages } from './hooks/useMessages'
@@ -123,6 +123,7 @@ function AppShell() {
         {activeView === 'calendar' && (
           <CalendarView
             events={events}
+            calendars={calendars}
             accounts={accounts}
             isLoading={eventsLoading}
             isFetching={eventsFetching}
@@ -139,6 +140,7 @@ function App() {
     // Apply default immediately, then override with persisted value
     applyTheme(useUIStore.getState().theme)
     initTheme()
+    initWeekStartDay()
   }, [])
 
   return (

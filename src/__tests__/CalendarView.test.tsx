@@ -98,7 +98,7 @@ describe('CalendarView', () => {
       </Wrapper>,
     )
 
-    expect(screen.getByText('Q2 Roadmap Sync')).toBeDefined()
+    expect(screen.getAllByText('Q2 Roadmap Sync').length).toBeGreaterThan(0)
   })
 
   it('renders all-day events in the strip', () => {
@@ -118,7 +118,29 @@ describe('CalendarView', () => {
       </Wrapper>,
     )
 
-    expect(screen.getByText('Holiday')).toBeDefined()
+    expect(screen.getAllByText('Holiday').length).toBeGreaterThan(0)
+  })
+
+  it('treats events spanning 24h+ as all-day even if all_day is false', () => {
+    const events = [
+      makeEvent({
+        id: 'holiday1',
+        title: 'Purim',
+        start: new Date('2026-03-04T00:00:00Z').getTime() / 1000,
+        end: new Date('2026-03-05T00:00:00Z').getTime() / 1000,
+        all_day: false, // Holiday calendar may not set this
+      }),
+    ]
+
+    const { container } = render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    // Should appear in the all-day strip, not as a timed event block
+    expect(container.querySelector('[class*="allDayEvent"]')).toBeDefined()
+    expect(container.querySelector('[class*="allDayEvent"]')?.textContent).toContain('Purim')
   })
 
   it('shows loading state', () => {
@@ -150,8 +172,8 @@ describe('CalendarView', () => {
 
     const eventBlock = container.querySelector('[class*="eventBlock"]') as HTMLElement
     expect(eventBlock).toBeDefined()
-    // 09:00 local → top = (9 - 7) * 56 = 112px
-    expect(eventBlock.style.top).toBe('112px')
+    // 09:00 local → top = 9 * 56 = 504px
+    expect(eventBlock.style.top).toBe('504px')
     // 1 hour = 56px - 2 = 54px height
     expect(eventBlock.style.height).toBe('54px')
   })
@@ -174,8 +196,8 @@ describe('CalendarView', () => {
       </Wrapper>,
     )
 
-    expect(screen.getByText('Work Meeting')).toBeDefined()
-    expect(screen.getByText('Personal Gym')).toBeDefined()
+    expect(screen.getAllByText('Work Meeting').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Personal Gym').length).toBeGreaterThan(0)
   })
 
   it('renders overlapping events side-by-side', () => {

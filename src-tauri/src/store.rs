@@ -15,6 +15,7 @@ const STORE_FILENAME: &str = "accounts.json";
 const ACCOUNTS_KEY: &str = "accounts";
 const THEME_KEY: &str = "theme";
 const CALENDAR_ENABLED_KEY: &str = "calendar_enabled";
+const WEEK_START_DAY_KEY: &str = "week_start_day";
 
 /// In-memory account state, synced to disk via tauri-plugin-store.
 pub struct AccountStore {
@@ -116,6 +117,31 @@ pub fn save_theme(app: &AppHandle, theme: &str) -> Result<(), String> {
         .map_err(|e| format!("Failed to open store: {e}"))?;
 
     store.set(THEME_KEY, serde_json::json!(theme));
+    store.save().map_err(|e| format!("Save error: {e}"))?;
+    Ok(())
+}
+
+/// Load the persisted week start day. Returns `None` if not set.
+/// 0 = Sunday, 1 = Monday.
+pub fn load_week_start_day(app: &AppHandle) -> Result<Option<u8>, String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    Ok(store
+        .get(WEEK_START_DAY_KEY)
+        .and_then(|v| v.as_u64())
+        .and_then(|v| u8::try_from(v).ok())
+        .filter(|&d| d <= 1))
+}
+
+/// Persist the week start day to disk. 0 = Sunday, 1 = Monday.
+pub fn save_week_start_day(app: &AppHandle, day: u8) -> Result<(), String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    store.set(WEEK_START_DAY_KEY, serde_json::json!(day));
     store.save().map_err(|e| format!("Save error: {e}"))?;
     Ok(())
 }

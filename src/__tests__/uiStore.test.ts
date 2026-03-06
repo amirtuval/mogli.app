@@ -107,6 +107,16 @@ describe('uiStore', () => {
     expect(weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(weekStart).toBe(getWeekStart(new Date(), weekStartDay))
   })
+
+  it('should set week start day and recalculate calendarWeekStart', () => {
+    useUIStore.getState().setWeekStartDay(0)
+    expect(useUIStore.getState().weekStartDay).toBe(0)
+    expect(useUIStore.getState().calendarWeekStart).toBe(getWeekStart(new Date(), 0))
+
+    useUIStore.getState().setWeekStartDay(1)
+    expect(useUIStore.getState().weekStartDay).toBe(1)
+    expect(useUIStore.getState().calendarWeekStart).toBe(getWeekStart(new Date(), 1))
+  })
 })
 
 describe('getWeekStart', () => {

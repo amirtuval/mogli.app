@@ -1,6 +1,6 @@
 import type { Account, Calendar } from '../types/models'
 import { MAIL_LABELS } from '../types/models'
-import type { Theme, AppView } from '../store/uiStore'
+import type { Theme, AppView, WeekStartDay } from '../store/uiStore'
 import { useUIStore } from '../store/uiStore'
 import { THEME_META } from '../styles/theme'
 import { useAddAccount } from '../hooks/useAccounts'
@@ -25,6 +25,8 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
   const setActiveView = useUIStore((s) => s.setActiveView)
   const toggleAccount = useUIStore((s) => s.toggleAccount)
   const setSelectedLabel = useUIStore((s) => s.setSelectedLabel)
+  const weekStartDay = useUIStore((s) => s.weekStartDay)
+  const setWeekStartDay = useUIStore((s) => s.setWeekStartDay)
   const addAccount = useAddAccount()
 
   const navItems: { id: AppView; icon: string; label: string; badge: number }[] = [
@@ -134,6 +136,20 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
           <>
             <div className={styles.miniCalSection}>
               <MiniCal />
+            </div>
+            <div className={styles.weekStartSection}>
+              <span className={styles.weekStartLabel}>Week starts on</span>
+              <div className={styles.weekStartToggle}>
+                {([0, 1] as WeekStartDay[]).map((day) => (
+                  <button
+                    key={day}
+                    className={`${styles.weekStartBtn} ${weekStartDay === day ? styles.weekStartBtnActive : ''}`}
+                    onClick={() => setWeekStartDay(day)}
+                  >
+                    {day === 0 ? 'Sun' : 'Mon'}
+                  </button>
+                ))}
+              </div>
             </div>
             <CalendarList accounts={accounts} calendars={calendars} />
           </>

@@ -33,6 +33,8 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::auth::list_accounts,
         commands::auth::load_theme,
         commands::auth::save_theme,
+        commands::auth::load_week_start_day,
+        commands::auth::save_week_start_day,
         commands::gmail::get_messages,
         commands::gmail::get_thread,
         commands::gmail::archive_thread,
@@ -62,6 +64,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().build())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_filename({
+                    #[cfg(debug_assertions)]
+                    { "window-state.dev.json" }
+                    #[cfg(not(debug_assertions))]
+                    { "window-state.json" }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .manage(AccountStore::new())

@@ -161,6 +161,28 @@ fn timestamp_to_rfc3339(ts: i64) -> String {
         .to_rfc3339()
 }
 
+/// Map a Google Calendar event `colorId` to its hex colour.
+///
+/// Google defines 11 fixed event colours (IDs "1"–"11").
+/// See <https://developers.google.com/calendar/api/v3/reference/colors/get>.
+fn color_id_to_hex(id: &str) -> Option<String> {
+    let hex = match id {
+        "1" => "#7986cb",  // Lavender
+        "2" => "#33b679",  // Sage
+        "3" => "#8e24aa",  // Grape
+        "4" => "#e67c73",  // Flamingo
+        "5" => "#f6bf26",  // Banana
+        "6" => "#f4511e",  // Tangerine
+        "7" => "#039be5",  // Peacock
+        "8" => "#616161",  // Graphite
+        "9" => "#3f51b5",  // Blueberry
+        "10" => "#0b8043", // Basil
+        "11" => "#d50000", // Tomato
+        _ => return None,
+    };
+    Some(hex.to_string())
+}
+
 fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Option<CalEvent> {
     let id = event.id?;
     let title = event.summary.unwrap_or_else(|| "(No title)".to_string());
@@ -179,7 +201,7 @@ fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Opt
         all_day,
         location: event.location,
         description: event.description,
-        color: event.color_id,
+        color: event.color_id.as_deref().and_then(color_id_to_hex),
     })
 }
 
