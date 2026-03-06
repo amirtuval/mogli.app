@@ -3,7 +3,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use log::{error, info, warn};
+use tauri::plugin::PermissionState;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_notification::NotificationExt;
 use tokio::time::interval;
 
 use crate::google::calendar as calendar_api;
@@ -50,6 +52,16 @@ pub fn start_calendar_reminders(app: AppHandle) {
 }
 
 async fn check_upcoming_events(app: &AppHandle) {
+    // Check notification permission first
+    let granted = app
+        .notification()
+        .permission_state()
+        .map(|s| s == PermissionState::Granted)
+        .unwrap_or(false);
+    if !granted {
+        return;
+    }
+
     let creds = match OAuthCredentials::load() {
         Ok(c) => c,
         Err(e) => {
@@ -166,8 +178,10 @@ async fn check_account_events(
                 event.title, cal.name, minutes_until
             );
 
-            if let Err(e) = notify_rust::Notification::new()
-                .summary(&event.title)
+            if let Err(e) = app
+                .notification()
+                .builder()
+                .title(&event.title)
                 .body(&body)
                 .show()
             {
