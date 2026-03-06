@@ -1,9 +1,11 @@
-import type { Account } from '../types/models'
+import type { Account, Calendar } from '../types/models'
 import { MAIL_LABELS } from '../types/models'
 import type { Theme, AppView } from '../store/uiStore'
 import { useUIStore } from '../store/uiStore'
 import { THEME_META } from '../styles/theme'
 import { useAddAccount } from '../hooks/useAccounts'
+import MiniCal from './MiniCal'
+import CalendarList from './CalendarList'
 import styles from './Sidebar.module.css'
 
 const THEME_KEYS: Theme[] = ['light', 'dark', 'ultraDark']
@@ -11,9 +13,10 @@ const THEME_KEYS: Theme[] = ['light', 'dark', 'ultraDark']
 interface SidebarProps {
   accounts: Account[]
   unreadCount: number
+  calendars: Calendar[]
 }
 
-export default function Sidebar({ accounts, unreadCount }: SidebarProps) {
+export default function Sidebar({ accounts, unreadCount, calendars }: SidebarProps) {
   const theme = useUIStore((s) => s.theme)
   const activeView = useUIStore((s) => s.activeView)
   const activeAccounts = useUIStore((s) => s.activeAccounts)
@@ -127,7 +130,14 @@ export default function Sidebar({ accounts, unreadCount }: SidebarProps) {
             ))}
           </div>
         )}
-        {/* Calendar sidebar content will be added in Phase 3 */}
+        {activeView === 'calendar' && (
+          <>
+            <div className={styles.miniCalSection}>
+              <MiniCal />
+            </div>
+            <CalendarList accounts={accounts} calendars={calendars} />
+          </>
+        )}
       </div>
     </aside>
   )

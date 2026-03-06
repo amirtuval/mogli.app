@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useUIStore } from '../store/uiStore'
+import { useUIStore, getMonday } from '../store/uiStore'
 
 describe('uiStore', () => {
   beforeEach(() => {
@@ -10,6 +10,7 @@ describe('uiStore', () => {
       activeAccounts: [],
       selectedThreadId: null,
       selectedLabel: 'INBOX',
+      calendarWeekStart: '2026-03-02',
     })
   })
 
@@ -20,6 +21,7 @@ describe('uiStore', () => {
     expect(state.activeAccounts).toEqual([])
     expect(state.selectedThreadId).toBeNull()
     expect(state.selectedLabel).toBe('INBOX')
+    expect(state.calendarWeekStart).toBe('2026-03-02')
   })
 
   it('should set theme', () => {
@@ -79,5 +81,47 @@ describe('uiStore', () => {
 
     useUIStore.getState().toggleAccount('b')
     expect(useUIStore.getState().activeAccounts).toEqual(['a', 'c'])
+  })
+
+  it('should set calendar week start', () => {
+    useUIStore.getState().setCalendarWeekStart('2026-03-09')
+    expect(useUIStore.getState().calendarWeekStart).toBe('2026-03-09')
+  })
+
+  it('should navigate week forward', () => {
+    useUIStore.getState().navigateWeek(1)
+    expect(useUIStore.getState().calendarWeekStart).toBe('2026-03-09')
+  })
+
+  it('should navigate week backward', () => {
+    useUIStore.getState().navigateWeek(-1)
+    expect(useUIStore.getState().calendarWeekStart).toBe('2026-02-23')
+  })
+
+  it('should go to today', () => {
+    useUIStore.setState({ calendarWeekStart: '2025-01-01' })
+    useUIStore.getState().goToToday()
+    const weekStart = useUIStore.getState().calendarWeekStart
+    // Should be this week's Monday
+    expect(weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(weekStart).toBe(getMonday(new Date()))
+  })
+})
+
+describe('getMonday', () => {
+  it('returns Monday for a Monday input', () => {
+    expect(getMonday(new Date('2026-03-02'))).toBe('2026-03-02')
+  })
+
+  it('returns Monday for a Wednesday input', () => {
+    expect(getMonday(new Date('2026-03-04'))).toBe('2026-03-02')
+  })
+
+  it('returns Monday for a Sunday input', () => {
+    expect(getMonday(new Date('2026-03-08'))).toBe('2026-03-02')
+  })
+
+  it('returns Monday for a Saturday input', () => {
+    expect(getMonday(new Date('2026-03-07'))).toBe('2026-03-02')
   })
 })

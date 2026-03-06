@@ -1,4 +1,5 @@
 import type { Account } from '../types/models'
+import { useUIStore } from '../store/uiStore'
 import styles from './TopBar.module.css'
 
 interface TopBarProps {
@@ -6,12 +7,54 @@ interface TopBarProps {
 }
 
 /**
- * Mail mode TopBar.
- * Phase 2: no search bar (search not yet implemented).
- * Shows active account avatar stack only.
- * Phase 5 adds search when it is wired to Gmail API.
+ * Mode-aware TopBar.
+ * - Mail mode: account avatar stack only (search added in Phase 5).
+ * - Calendar mode: month/year + week number + ‹ Today › navigation + avatars.
  */
 export default function TopBar({ activeAccounts }: TopBarProps) {
+  const activeView = useUIStore((s) => s.activeView)
+  const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
+  const navigateWeek = useUIStore((s) => s.navigateWeek)
+  const goToToday = useUIStore((s) => s.goToToday)
+
+  if (activeView === 'calendar') {
+    const weekStartDate = new Date(calendarWeekStart + 'T00:00:00')
+    const monthName = weekStartDate.toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    })
+    // ISO week number
+    const weekNum = getISOWeekNumber(weekStartDate)
+
+    return (
+      <div className={styles.topBar}>
+        <div className={styles.calendarNav}>
+          <span className={styles.monthLabel}>{monthName}</span>
+          <span className={styles.weekLabel}>Week {weekNum}</span>
+        </div>
+        <div className={styles.navButtons}>
+          <button className={styles.navBtn} onClick={() => navigateWeek(-1)}>
+            ‹
+          </button>
+          <button className={`${styles.navBtn} ${styles.todayBtn}`} onClick={goToToday}>
+            Today
+          </button>
+          <button className={styles.navBtn} onClick={() => navigateWeek(1)}>
+            ›
+          </button>
+        </div>
+        <div className={styles.avatarStack}>
+          {activeAccounts.map((a) => (
+            <div key={a.id} className={styles.avatar} style={{ background: a.color }}>
+              {a.display_name[0]?.toUpperCase() ?? '?'}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Mail mode (default)
   return (
     <div className={styles.topBar}>
       <div className={styles.spacer} />
@@ -24,4 +67,13 @@ export default function TopBar({ activeAccounts }: TopBarProps) {
       </div>
     </div>
   )
+}
+
+/** Get ISO 8601 week number for a date. */
+function getISOWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7)
 }

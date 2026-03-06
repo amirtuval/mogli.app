@@ -1,0 +1,154 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { invoke } from '@tauri-apps/api/core'
+import type { Account, Calendar } from '../types/models'
+import CalendarList from '../components/CalendarList'
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+})
+
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+}
+
+const MOCK_ACCOUNTS: Account[] = [
+  {
+    id: 'a1',
+    email: 'work@example.com',
+    display_name: 'Work',
+    color: '#4f9cf9',
+    history_id: '1',
+  },
+  {
+    id: 'a2',
+    email: 'personal@example.com',
+    display_name: 'Personal',
+    color: '#f97316',
+    history_id: '1',
+  },
+]
+
+const MOCK_CALENDARS: Calendar[] = [
+  {
+    id: 'primary',
+    account_id: 'a1',
+    name: 'Work Calendar',
+    color: '#4f9cf9',
+    enabled: true,
+    primary: true,
+  },
+  {
+    id: 'team@cal',
+    account_id: 'a1',
+    name: 'Team Calendar',
+    color: '#34d399',
+    enabled: true,
+    primary: false,
+  },
+  {
+    id: 'primary',
+    account_id: 'a2',
+    name: 'Personal Calendar',
+    color: '#f97316',
+    enabled: false,
+    primary: true,
+  },
+]
+
+describe('CalendarList', () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset()
+    vi.mocked(invoke).mockResolvedValue(undefined)
+  })
+
+  it('renders calendars grouped by account', () => {
+    render(
+      <Wrapper>
+        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    expect(screen.getByText('Work')).toBeDefined()
+    expect(screen.getByText('Personal')).toBeDefined()
+    expect(screen.getByText('Work Calendar')).toBeDefined()
+    expect(screen.getByText('Team Calendar')).toBeDefined()
+    expect(screen.getByText('Personal Calendar')).toBeDefined()
+  })
+
+  it('renders the "Calendars" section label', () => {
+    render(
+      <Wrapper>
+        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    expect(screen.getByText('Calendars')).toBeDefined()
+  })
+
+  it('renders the Week view label', () => {
+    render(
+      <Wrapper>
+        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    expect(screen.getByText('Week')).toBeDefined()
+    expect(screen.getByText('View')).toBeDefined()
+  })
+
+  it('calls set_calendar_enabled when clicking a calendar toggle', async () => {
+    render(
+      <Wrapper>
+        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    // Click the "Work Calendar" row to toggle it off
+    const calendarItem = screen.getByText('Work Calendar')
+    fireEvent.click(calendarItem.closest('[class*="calendarItem"]')!)
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('set_calendar_enabled', {
+        accountId: 'a1',
+        calendarId: 'primary',
+        enabled: false,
+      })
+    })
+  })
+
+  it('shows checkmark for enabled calendars', () => {
+    const { container } = render(
+      <Wrapper>
+        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    const checkedBoxes = container.querySelectorAll('[class*="checkboxChecked"]')
+    // Work Calendar (enabled) + Team Calendar (enabled) = 2 checked
+    expect(checkedBoxes.length).toBe(2)
+  })
+
+  it('does not render account groups with no calendars', () => {
+    const accountsWithExtra: Account[] = [
+      ...MOCK_ACCOUNTS,
+      {
+        id: 'a3',
+        email: 'extra@example.com',
+        display_name: 'Extra',
+        color: '#a78bfa',
+        history_id: '1',
+      },
+    ]
+
+    render(
+      <Wrapper>
+        <CalendarList accounts={accountsWithExtra} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    // a3 has no calendars, so "Extra" should not appear as an account header
+    expect(screen.queryByText('Extra')).toBeNull()
+  })
+})

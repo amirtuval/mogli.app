@@ -29,3 +29,48 @@
   color: #fff;
   border: 2px solid var(--bg-app);
 }
+
+/* ── Calendar mode ── */
+.calendarNav {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+}
+
+.monthLabel {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.weekLabel {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.navButtons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.navBtn {
+  background: var(--bg-btn);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+
+.navBtn:hover {
+  background: var(--bg-hover);
+}
+
+.todayBtn {
+  color: #4f9cf9;
+}

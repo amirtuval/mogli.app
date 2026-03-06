@@ -241,3 +241,8 @@
   padding: 1px 5px;
   border-radius: 8px;
 }
+
+/* ── Calendar sidebar ── */
+.miniCalSection {
+  border-bottom: 1px solid var(--border);
+}

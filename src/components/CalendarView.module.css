@@ -1,0 +1,167 @@
+.container {
+  display: flex;
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* ── Time column ── */
+.timeColumn {
+  width: 50px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+}
+
+.timeSlot {
+  height: 56px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 4px 7px 0 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.timeLabel {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ── Day columns ── */
+.dayColumn {
+  flex: 1;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-width: 100px;
+}
+
+.dayColumn:last-child {
+  border-right: none;
+}
+
+/* ── Day header ── */
+.dayHeader {
+  height: 38px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--border);
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.dayName {
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dayNumber {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.dayNumberToday {
+  background: #4f9cf9;
+  color: #fff;
+}
+
+/* ── All-day events strip ── */
+.allDayStrip {
+  min-height: 24px;
+  border-bottom: 1px solid var(--border-light);
+  padding: 2px 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.allDayEvent {
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* ── Hour grid + events ── */
+.hourGrid {
+  flex: 1;
+  position: relative;
+}
+
+.hourRow {
+  height: 56px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* ── Event block ── */
+.eventBlock {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-radius: 4px;
+  padding: 4px 7px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+
+.eventBlock:hover {
+  opacity: 0.85;
+}
+
+.eventTitle {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.eventTime {
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* ── Now line ── */
+.nowLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #4f9cf9;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.nowDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4f9cf9;
+  margin-left: -3.5px;
+}
+
+/* ── Loading ── */
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}

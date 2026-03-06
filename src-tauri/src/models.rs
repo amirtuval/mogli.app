@@ -11,7 +11,31 @@ pub struct Account {
     pub history_id: String,
 }
 
-// Calendar struct will be added in Phase 3.
+/// A single Google Calendar within an account.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct Calendar {
+    pub id: String,
+    pub account_id: String,
+    pub name: String,
+    pub color: String,
+    pub enabled: bool,
+    pub primary: bool,
+}
+
+/// Calendar event.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct CalEvent {
+    pub id: String,
+    pub account_id: String,
+    pub calendar_id: String,
+    pub title: String,
+    pub start: i64,
+    pub end: i64,
+    pub all_day: bool,
+    pub location: Option<String>,
+    pub description: Option<String>,
+    pub color: Option<String>,
+}
 
 /// Message metadata — never stores body.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -55,8 +79,6 @@ pub struct Attachment {
     pub mime_type: String,
     pub size: u64,
 }
-
-// CalEvent struct will be added in Phase 3.
 
 /// Ordered list of account colors assigned on add.
 pub const ACCOUNT_COLORS: &[&str] = &[
