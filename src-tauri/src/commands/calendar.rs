@@ -40,6 +40,10 @@ pub async fn set_calendar_enabled(
 }
 
 /// Fetch events across multiple accounts and calendars for a time range.
+///
+/// `calendar_ids` acts as a filter — only calendars whose ID is in this list
+/// will be queried. Each account only fetches its own matching calendars
+/// (calendar IDs are account-scoped).
 #[tauri::command]
 #[specta::specta]
 pub async fn get_events(
@@ -52,23 +56,39 @@ pub async fn get_events(
     let creds = OAuthCredentials::load()?;
     let mut all_events = Vec::new();
 
+    let calendar_id_set: std::collections::HashSet<&str> =
+        calendar_ids.iter().map(String::as_str).collect();
+
     for account_id in &account_ids {
         let email = store::account_email(&app, account_id)?;
 
-        for calendar_id in &calendar_ids {
+        // Fetch this account's calendar list to know which IDs belong to it
+        let account_calendars = calendar_api::fetch_calendars(&creds, account_id, &email).await?;
+
+        // Apply persisted enabled state
+        let enabled_state = store::load_calendar_enabled(&app)?;
+
+        for cal in &account_calendars {
+            // Skip calendars not in the requested set
+            if !calendar_id_set.contains(cal.id.as_str()) {
+                continue;
+            }
+
+            // Skip calendars the user has disabled
+            let key = format!("{}::{}", account_id, cal.id);
+            let enabled = enabled_state.get(&key).copied().unwrap_or(true);
+            if !enabled {
+                continue;
+            }
+
             match calendar_api::fetch_events(
-                &creds,
-                account_id,
-                &email,
-                calendar_id,
-                time_min,
-                time_max,
+                &creds, account_id, &email, &cal.id, time_min, time_max,
             )
             .await
             {
                 Ok(events) => all_events.extend(events),
                 Err(e) => {
-                    log::warn!("Failed to fetch events for {account_id}/{calendar_id}: {e}");
+                    log::warn!("Failed to fetch events for {account_id}/{}: {e}", cal.id);
                 }
             }
         }

@@ -116,15 +116,18 @@ pub async fn fetch_events(
     let time_max_rfc = timestamp_to_rfc3339(time_max);
     let encoded_cal_id = urlencoding::encode(calendar_id);
 
-    let url = format!(
-        "{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events
-         ?timeMin={time_min_rfc}&timeMax={time_max_rfc}
-         &singleEvents=true&orderBy=startTime&maxResults=250"
-    );
+    let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events");
 
     let resp = client
         .get(&url)
         .bearer_auth(&token)
+        .query(&[
+            ("timeMin", &time_min_rfc),
+            ("timeMax", &time_max_rfc),
+            ("singleEvents", &"true".to_string()),
+            ("orderBy", &"startTime".to_string()),
+            ("maxResults", &"250".to_string()),
+        ])
         .send()
         .await
         .map_err(|e| format!("Events list request failed: {e}"))?;
