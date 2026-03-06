@@ -30,6 +30,22 @@ export default function CalendarList({ accounts, calendars }: CalendarListProps)
     })
   }
 
+  const handleAccountToggle = (accountId: string) => {
+    const accountCals = grouped.get(accountId) ?? []
+    // If all are enabled → disable all; otherwise → enable all
+    const allEnabled = accountCals.every((c) => c.enabled)
+    const newEnabled = !allEnabled
+    for (const cal of accountCals) {
+      if (cal.enabled !== newEnabled) {
+        setEnabled.mutate({
+          accountId: cal.account_id,
+          calendarId: cal.id,
+          enabled: newEnabled,
+        })
+      }
+    }
+  }
+
   return (
     <>
       <div className={styles.container}>
@@ -38,10 +54,21 @@ export default function CalendarList({ accounts, calendars }: CalendarListProps)
           const accountCals = grouped.get(account.id) ?? []
           if (accountCals.length === 0) return null
 
+          const allEnabled = accountCals.every((c) => c.enabled)
+          const noneEnabled = accountCals.every((c) => !c.enabled)
+
           return (
             <div key={account.id} className={styles.accountGroup}>
-              <div className={styles.accountHeader}>
-                <div className={styles.accountDot} style={{ background: account.color }} />
+              <div className={styles.accountHeader} onClick={() => handleAccountToggle(account.id)}>
+                <div
+                  className={`${styles.checkbox} ${!noneEnabled ? styles.checkboxChecked : ''}`}
+                  style={{
+                    background: !noneEnabled ? account.color : 'transparent',
+                    borderColor: !noneEnabled ? account.color : undefined,
+                  }}
+                >
+                  {allEnabled ? '✓' : noneEnabled ? '' : '–'}
+                </div>
                 {account.display_name}
               </div>
               {accountCals.map((cal) => (

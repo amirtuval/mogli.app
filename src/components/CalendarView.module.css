@@ -111,13 +111,12 @@
 /* ── Event block ── */
 .eventBlock {
   position: absolute;
-  left: 3px;
-  right: 3px;
   border-radius: 4px;
   padding: 4px 7px;
   overflow: hidden;
   cursor: pointer;
   transition: opacity 0.1s;
+  box-sizing: border-box;
 }
 
 .eventBlock:hover {

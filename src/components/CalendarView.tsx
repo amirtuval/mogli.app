@@ -11,6 +11,8 @@ interface CalendarViewProps {
   events: CalEvent[] | undefined
   accounts: Account[]
   isLoading: boolean
+  /** True while fetching new data (even if stale data is still displayed) */
+  isFetching?: boolean
 }
 
 /** Get the account color for an event (from the event's color or the account). */
@@ -20,7 +22,89 @@ function eventColor(event: CalEvent, accounts: Account[]): string {
   return acct?.color ?? '#4f9cf9'
 }
 
-export default function CalendarView({ events, accounts, isLoading }: CalendarViewProps) {
+/** Represents a timed event with its computed overlap layout. */
+interface LayoutEvent {
+  event: CalEvent
+  /** 0-based column index within an overlap group */
+  column: number
+  /** Total number of columns in this overlap group */
+  totalColumns: number
+}
+
+/**
+ * Compute side-by-side layout for overlapping timed events.
+ * Uses a greedy column assignment: events are sorted by start time, then
+ * placed in the first column that doesn't overlap with an existing event.
+ */
+function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
+  if (timedEvents.length === 0) return []
+
+  const sorted = [...timedEvents].sort((a, b) => a.start - b.start || a.end - b.end)
+
+  // Each column tracks the end time of the last event placed in it
+  const columns: number[] = []
+  const assignments: { event: CalEvent; column: number }[] = []
+
+  for (const event of sorted) {
+    // Find the first column where the event doesn't overlap
+    let placed = false
+    for (let c = 0; c < columns.length; c++) {
+      if (event.start >= columns[c]) {
+        columns[c] = event.end
+        assignments.push({ event, column: c })
+        placed = true
+        break
+      }
+    }
+    if (!placed) {
+      assignments.push({ event, column: columns.length })
+      columns.push(event.end)
+    }
+  }
+
+  // Now compute connected overlap groups to determine totalColumns per event.
+  // Two events are in the same group if they transitively overlap.
+  const groups: number[][] = [] // indices into assignments
+  const visited = new Set<number>()
+
+  for (let i = 0; i < assignments.length; i++) {
+    if (visited.has(i)) continue
+    const group: number[] = [i]
+    visited.add(i)
+    let maxEnd = assignments[i].event.end
+
+    for (let j = i + 1; j < assignments.length; j++) {
+      if (visited.has(j)) continue
+      if (assignments[j].event.start < maxEnd) {
+        group.push(j)
+        visited.add(j)
+        maxEnd = Math.max(maxEnd, assignments[j].event.end)
+      }
+    }
+    groups.push(group)
+  }
+
+  const result: LayoutEvent[] = new Array(assignments.length)
+  for (const group of groups) {
+    const totalColumns = Math.max(...group.map((idx) => assignments[idx].column)) + 1
+    for (const idx of group) {
+      result[idx] = {
+        event: assignments[idx].event,
+        column: assignments[idx].column,
+        totalColumns,
+      }
+    }
+  }
+
+  return result
+}
+
+export default function CalendarView({
+  events,
+  accounts,
+  isLoading,
+  isFetching = false,
+}: CalendarViewProps) {
   const theme = useUIStore((s) => s.theme)
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
   const isLight = theme === 'light'
@@ -57,11 +141,13 @@ export default function CalendarView({ events, accounts, isLoading }: CalendarVi
     return () => clearInterval(interval)
   }, [])
 
-  // Group events by day
+  // Group events by day, computing overlap layout for timed events
   const eventsByDay = useMemo(() => {
-    const map = new Map<number, { timed: CalEvent[]; allDay: CalEvent[] }>()
+    const map = new Map<number, { timed: LayoutEvent[]; allDay: CalEvent[] }>()
+    const timedByDay = new Map<number, CalEvent[]>()
     for (let i = 0; i < 7; i++) {
       map.set(i, { timed: [], allDay: [] })
+      timedByDay.set(i, [])
     }
 
     if (!events) return map
@@ -76,20 +162,24 @@ export default function CalendarView({ events, accounts, isLoading }: CalendarVi
           startDate.getMonth() === day.getMonth() &&
           startDate.getDate() === day.getDate()
         ) {
-          const bucket = map.get(i)!
           if (event.all_day) {
-            bucket.allDay.push(event)
+            map.get(i)!.allDay.push(event)
           } else {
-            bucket.timed.push(event)
+            timedByDay.get(i)!.push(event)
           }
         }
       }
     }
 
+    // Compute overlap layout per day
+    for (let i = 0; i < 7; i++) {
+      map.get(i)!.timed = computeOverlapLayout(timedByDay.get(i)!)
+    }
+
     return map
   }, [events, weekDays])
 
-  if (isLoading) {
+  if (isLoading && !events?.length) {
     return <div className={styles.loading}>Loading calendar…</div>
   }
 
@@ -103,7 +193,10 @@ export default function CalendarView({ events, accounts, isLoading }: CalendarVi
   const nowTop = (nowMinutes / 60 - 7) * ROW_HEIGHT
 
   return (
-    <div className={styles.container}>
+    <div
+      className={styles.container}
+      style={{ opacity: isFetching ? 0.5 : 1, transition: 'opacity 0.15s ease' }}
+    >
       {/* Time column */}
       <div className={styles.timeColumn}>
         <div style={{ height: 38 }} /> {/* Align with day headers */}
@@ -158,7 +251,7 @@ export default function CalendarView({ events, accounts, isLoading }: CalendarVi
               ))}
 
               {/* Timed events */}
-              {dayData.timed.map((ev) => {
+              {dayData.timed.map(({ event: ev, column, totalColumns }) => {
                 const startDate = new Date(ev.start * 1000)
                 const endDate = new Date(ev.end * 1000)
                 const startMinutes = startDate.getHours() * 60 + startDate.getMinutes()
@@ -171,6 +264,10 @@ export default function CalendarView({ events, accounts, isLoading }: CalendarVi
                 const startStr = formatMinutes(startMinutes)
                 const endStr = formatMinutes(endMinutes)
 
+                // Side-by-side: divide the column width evenly
+                const widthPercent = 100 / totalColumns
+                const leftPercent = column * widthPercent
+
                 return (
                   <div
                     key={ev.id}
@@ -178,6 +275,8 @@ export default function CalendarView({ events, accounts, isLoading }: CalendarVi
                     style={{
                       top,
                       height: Math.max(height, 18),
+                      left: `calc(${leftPercent}% + 1px)`,
+                      width: `calc(${widthPercent}% - 2px)`,
                       background: color + (isLight ? '1a' : '26'),
                       borderLeft: `2.5px solid ${color}`,
                     }}

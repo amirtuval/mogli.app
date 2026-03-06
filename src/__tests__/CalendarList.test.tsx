@@ -118,7 +118,7 @@ describe('CalendarList', () => {
     })
   })
 
-  it('shows checkmark for enabled calendars', () => {
+  it('shows checkmark for enabled calendars and account headers', () => {
     const { container } = render(
       <Wrapper>
         <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
@@ -126,8 +126,59 @@ describe('CalendarList', () => {
     )
 
     const checkedBoxes = container.querySelectorAll('[class*="checkboxChecked"]')
-    // Work Calendar (enabled) + Team Calendar (enabled) = 2 checked
-    expect(checkedBoxes.length).toBe(2)
+    // Work account header (all enabled) + Work Calendar + Team Calendar = 3 checked
+    // Personal account header is also "checked" (partial/dash) since it's not "noneEnabled"
+    // Personal Calendar is disabled → not checked
+    // Actually: Work header (allEnabled) + Work Cal + Team Cal = 3 checked
+    // Personal header: noneEnabled=true, so NOT checked. Personal Cal: disabled, NOT checked.
+    expect(checkedBoxes.length).toBe(3)
+  })
+
+  it('toggles all calendars in an account when clicking account header', async () => {
+    render(
+      <Wrapper>
+        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    // Click "Work" account header to toggle all Work calendars off
+    const workHeader = screen.getByText('Work').closest('[class*="accountHeader"]')!
+    fireEvent.click(workHeader)
+
+    // Should call set_calendar_enabled for each enabled calendar in the Work account
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('set_calendar_enabled', {
+        accountId: 'a1',
+        calendarId: 'primary',
+        enabled: false,
+      })
+      expect(invoke).toHaveBeenCalledWith('set_calendar_enabled', {
+        accountId: 'a1',
+        calendarId: 'team@cal',
+        enabled: false,
+      })
+    })
+  })
+
+  it('enables all calendars in an account when some are disabled', async () => {
+    // Personal account has its calendar disabled
+    render(
+      <Wrapper>
+        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
+      </Wrapper>,
+    )
+
+    // Click "Personal" account header to enable all
+    const personalHeader = screen.getByText('Personal').closest('[class*="accountHeader"]')!
+    fireEvent.click(personalHeader)
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('set_calendar_enabled', {
+        accountId: 'a2',
+        calendarId: 'primary',
+        enabled: true,
+      })
+    })
   })
 
   it('does not render account groups with no calendars', () => {

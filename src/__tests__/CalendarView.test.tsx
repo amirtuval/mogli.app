@@ -176,6 +176,43 @@ describe('CalendarView', () => {
     expect(screen.getByText('Personal Gym')).toBeDefined()
   })
 
+  it('renders overlapping events side-by-side', () => {
+    const startLocal = new Date(2026, 2, 4, 10, 0, 0) // Mar 4 2026, 10:00 local
+    const endLocal = new Date(2026, 2, 4, 11, 0, 0) // Mar 4 2026, 11:00 local
+    const events = [
+      makeEvent({
+        id: 'ev1',
+        title: 'Meeting A',
+        start: startLocal.getTime() / 1000,
+        end: endLocal.getTime() / 1000,
+      }),
+      makeEvent({
+        id: 'ev2',
+        title: 'Meeting B',
+        start: startLocal.getTime() / 1000,
+        end: endLocal.getTime() / 1000,
+      }),
+    ]
+
+    const { container } = render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    const blocks = container.querySelectorAll('[class*="eventBlock"]') as NodeListOf<HTMLElement>
+    expect(blocks.length).toBe(2)
+
+    // They should have different left positions (side by side, not stacked)
+    const lefts = Array.from(blocks).map((b) => b.style.left)
+    expect(lefts[0]).not.toBe(lefts[1])
+
+    // Each should be ~50% width
+    const widths = Array.from(blocks).map((b) => b.style.width)
+    expect(widths[0]).toContain('50%')
+    expect(widths[1]).toContain('50%')
+  })
+
   it('highlights today column with special day number styling', () => {
     // Set week to contain today
     const now = new Date()

@@ -44,11 +44,11 @@ function AppShell() {
   )
 
   // Fetch events for the current week
-  const { data: events, isLoading: eventsLoading } = useEvents(
-    activeAccounts,
-    enabledCalendarIds,
-    calendarWeekStart,
-  )
+  const {
+    data: events,
+    isLoading: eventsLoading,
+    isFetching: eventsFetching,
+  } = useEvents(activeAccounts, enabledCalendarIds, calendarWeekStart)
 
   // Apply theme CSS vars whenever theme changes
   useEffect(() => {
@@ -121,7 +121,12 @@ function AppShell() {
           <MailView accounts={accounts} messages={messages} isLoading={messagesLoading} />
         )}
         {activeView === 'calendar' && (
-          <CalendarView events={events} accounts={accounts} isLoading={eventsLoading} />
+          <CalendarView
+            events={events}
+            accounts={accounts}
+            isLoading={eventsLoading}
+            isFetching={eventsFetching}
+          />
         )}
       </main>
     </div>
