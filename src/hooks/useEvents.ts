@@ -30,6 +30,7 @@ export function useEvents(accountIds: string[], calendarIds: string[], weekStart
         }),
       enabled,
       placeholderData: keepPreviousData,
+      refetchInterval: 1000 * 60 * 2, // 2 minutes
     })),
   })
 

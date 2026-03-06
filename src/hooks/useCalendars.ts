@@ -20,6 +20,7 @@ export function useAllCalendars(accountIds: string[]) {
       return results.flat()
     },
     enabled: accountIds.length > 0,
+    refetchInterval: 1000 * 60 * 2, // 2 minutes
   })
 }
 
