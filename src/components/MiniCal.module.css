@@ -70,6 +70,15 @@
   background: transparent;
 }
 
+.dayCellViewed {
+  background: var(--bg-selected);
+  font-weight: 500;
+}
+
+.dayCellViewed:hover {
+  background: var(--bg-hover);
+}
+
 .dayCellToday {
   font-weight: 600;
   background: #4f9cf9;

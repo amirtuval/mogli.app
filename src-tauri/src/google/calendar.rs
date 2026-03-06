@@ -227,20 +227,40 @@ mod tests {
     fn test_parse_datetime_rfc3339() {
         let ts = parse_datetime("2026-03-06T09:00:00+02:00").unwrap();
         // 2026-03-06T09:00:00+02:00 = 2026-03-06T07:00:00Z
-        assert_eq!(ts, 1772802000);
+        let expected = DateTime::parse_from_rfc3339("2026-03-06T07:00:00Z")
+            .unwrap()
+            .timestamp();
+        assert_eq!(ts, expected);
     }
 
     #[test]
     fn test_parse_datetime_utc() {
         let ts = parse_datetime("2026-03-06T07:00:00Z").unwrap();
-        assert_eq!(ts, 1772802000);
+        let expected = DateTime::parse_from_rfc3339("2026-03-06T07:00:00Z")
+            .unwrap()
+            .timestamp();
+        assert_eq!(ts, expected);
+    }
+
+    #[test]
+    fn test_parse_datetime_consistency() {
+        // Both representations refer to the same instant
+        let ts_offset = parse_datetime("2026-03-06T09:00:00+02:00").unwrap();
+        let ts_utc = parse_datetime("2026-03-06T07:00:00Z").unwrap();
+        assert_eq!(ts_offset, ts_utc);
     }
 
     #[test]
     fn test_parse_date_to_timestamp() {
         let ts = parse_date_to_timestamp("2026-03-06").unwrap();
-        // 2026-03-06T00:00:00Z
-        assert_eq!(ts, 1772776800);
+        // Should be midnight UTC on 2026-03-06
+        let expected = NaiveDate::from_ymd_opt(2026, 3, 6)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        assert_eq!(ts, expected);
     }
 
     #[test]
@@ -254,8 +274,15 @@ mod tests {
             date: None,
         };
         let (s, e, all_day) = parse_event_times(&start, &end).unwrap();
-        assert_eq!(s, 1772809200);
-        assert_eq!(e, 1772812800);
+        let expected_s = DateTime::parse_from_rfc3339("2026-03-06T09:00:00Z")
+            .unwrap()
+            .timestamp();
+        let expected_e = DateTime::parse_from_rfc3339("2026-03-06T10:00:00Z")
+            .unwrap()
+            .timestamp();
+        assert_eq!(s, expected_s);
+        assert_eq!(e, expected_e);
+        assert_eq!(e - s, 3600); // 1 hour
         assert!(!all_day);
     }
 
@@ -270,8 +297,21 @@ mod tests {
             date: Some("2026-03-07".to_string()),
         };
         let (s, e, all_day) = parse_event_times(&start, &end).unwrap();
-        assert_eq!(s, 1772776800);
-        assert_eq!(e, 1772863200);
+        let expected_s = NaiveDate::from_ymd_opt(2026, 3, 6)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        let expected_e = NaiveDate::from_ymd_opt(2026, 3, 7)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        assert_eq!(s, expected_s);
+        assert_eq!(e, expected_e);
+        assert_eq!(e - s, 86400); // 1 day
         assert!(all_day);
     }
 

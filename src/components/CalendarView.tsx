@@ -33,66 +33,72 @@ interface LayoutEvent {
 
 /**
  * Compute side-by-side layout for overlapping timed events.
- * Uses a greedy column assignment: events are sorted by start time, then
- * placed in the first column that doesn't overlap with an existing event.
+ *
+ * Algorithm:
+ * 1. Sort by start ascending; break ties by longer duration first so long
+ *    events anchor the layout.
+ * 2. Build transitive overlap clusters — events A and B are in the same
+ *    cluster if any chain of pairwise-overlapping events connects them.
+ * 3. Within each cluster, greedily assign columns (first-fit).
+ * 4. Every event in a cluster shares the same totalColumns (= max columns
+ *    used in that cluster).
  */
 function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
   if (timedEvents.length === 0) return []
 
-  const sorted = [...timedEvents].sort((a, b) => a.start - b.start || a.end - b.end)
+  const sorted = [...timedEvents].sort(
+    (a, b) => a.start - b.start || b.end - a.end || a.id.localeCompare(b.id),
+  )
 
-  // Each column tracks the end time of the last event placed in it
-  const columns: number[] = []
-  const assignments: { event: CalEvent; column: number }[] = []
+  // ── Step 1: build transitive overlap clusters ──
+  const clusters: CalEvent[][] = []
+  let clusterEnd = -Infinity
+  let currentCluster: CalEvent[] = []
 
-  for (const event of sorted) {
-    // Find the first column where the event doesn't overlap
-    let placed = false
-    for (let c = 0; c < columns.length; c++) {
-      if (event.start >= columns[c]) {
-        columns[c] = event.end
-        assignments.push({ event, column: c })
-        placed = true
-        break
-      }
-    }
-    if (!placed) {
-      assignments.push({ event, column: columns.length })
-      columns.push(event.end)
+  for (const ev of sorted) {
+    if (ev.start < clusterEnd) {
+      // Overlaps with something already in the cluster
+      currentCluster.push(ev)
+      clusterEnd = Math.max(clusterEnd, ev.end)
+    } else {
+      // New cluster
+      if (currentCluster.length > 0) clusters.push(currentCluster)
+      currentCluster = [ev]
+      clusterEnd = ev.end
     }
   }
+  if (currentCluster.length > 0) clusters.push(currentCluster)
 
-  // Now compute connected overlap groups to determine totalColumns per event.
-  // Two events are in the same group if they transitively overlap.
-  const groups: number[][] = [] // indices into assignments
-  const visited = new Set<number>()
+  // ── Step 2: assign columns within each cluster ──
+  const result: LayoutEvent[] = []
 
-  for (let i = 0; i < assignments.length; i++) {
-    if (visited.has(i)) continue
-    const group: number[] = [i]
-    visited.add(i)
-    let maxEnd = assignments[i].event.end
+  for (const cluster of clusters) {
+    // Each column tracks the end time of the last event placed in it
+    const columnEnds: number[] = []
+    const assignments: { event: CalEvent; column: number }[] = []
 
-    for (let j = i + 1; j < assignments.length; j++) {
-      if (visited.has(j)) continue
-      if (assignments[j].event.start < maxEnd) {
-        group.push(j)
-        visited.add(j)
-        maxEnd = Math.max(maxEnd, assignments[j].event.end)
+    for (const ev of cluster) {
+      // Find the first column where this event doesn't overlap
+      let col = -1
+      for (let c = 0; c < columnEnds.length; c++) {
+        if (ev.start >= columnEnds[c]) {
+          col = c
+          break
+        }
       }
+      if (col === -1) {
+        col = columnEnds.length
+        columnEnds.push(ev.end)
+      } else {
+        columnEnds[col] = ev.end
+      }
+      assignments.push({ event: ev, column: col })
     }
-    groups.push(group)
-  }
 
-  const result: LayoutEvent[] = new Array(assignments.length)
-  for (const group of groups) {
-    const totalColumns = Math.max(...group.map((idx) => assignments[idx].column)) + 1
-    for (const idx of group) {
-      result[idx] = {
-        event: assignments[idx].event,
-        column: assignments[idx].column,
-        totalColumns,
-      }
+    const totalColumns = columnEnds.length
+
+    for (const { event, column } of assignments) {
+      result.push({ event, column, totalColumns })
     }
   }
 
