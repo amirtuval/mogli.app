@@ -1,9 +1,7 @@
 use std::time::Duration;
 
-use log::{error, warn};
-use tauri::plugin::PermissionState;
+use log::{error, info, warn};
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_notification::NotificationExt;
 use tokio::time::interval;
 
 use crate::google::gmail as gmail_api;
@@ -111,6 +109,10 @@ async fn sync_account(
                 }
 
                 let has_new = !result.new_message_ids.is_empty();
+                info!(
+                    "Sync {email}: history.list returned {} new message(s)",
+                    result.new_message_ids.len()
+                );
 
                 // Notify only for the newly arrived messages
                 if has_new {
@@ -158,15 +160,10 @@ async fn notify_new_messages(
     email: &str,
     new_message_ids: &[String],
 ) {
-    // Check if notifications are permitted
-    let granted = app
-        .notification()
-        .permission_state()
-        .map(|s| s == PermissionState::Granted)
-        .unwrap_or(false);
-    if !granted {
-        return;
-    }
+    info!(
+        "notify_new_messages: fetching metadata for {} message(s)",
+        new_message_ids.len()
+    );
 
     // Only fetch metadata for the specific new messages (up to limit)
     let ids_to_fetch: Vec<String> = new_message_ids
@@ -184,16 +181,21 @@ async fn notify_new_messages(
             }
         };
 
+    info!("Fetched {} message(s) for notification", messages.len());
+
     for msg in &messages {
-        // Fire OS notification
-        if let Err(e) = app
-            .notification()
-            .builder()
-            .title(&msg.from)
+        info!(
+            "Sending OS notification: from='{}' subject='{}'",
+            msg.from, msg.subject
+        );
+        // Fire OS notification via notify-rust (works in dev builds on Windows)
+        match notify_rust::Notification::new()
+            .summary(&msg.from)
             .body(&msg.subject)
             .show()
         {
-            warn!("Failed to send email notification: {e}");
+            Ok(_handle) => info!("OS notification sent successfully"),
+            Err(e) => warn!("Failed to send email notification: {e}"),
         }
 
         // Emit event so frontend can navigate to the thread on click
