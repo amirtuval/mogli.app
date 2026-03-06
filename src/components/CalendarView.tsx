@@ -101,9 +101,7 @@ function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
       for (let c = column + 1; c < totalColumns; c++) {
         const blocked = assignments.some(
           (other) =>
-            other.column === c &&
-            other.event.start < event.end &&
-            other.event.end > event.start,
+            other.column === c && other.event.start < event.end && other.event.end > event.start,
         )
         if (blocked) break
         span++
@@ -265,9 +263,7 @@ export default function CalendarView({
                 <span className={styles.dayName}>
                   {day.toLocaleDateString(undefined, { weekday: 'short' })}
                 </span>
-                <span
-                  className={`${styles.dayNumber} ${isTodayCol ? styles.dayNumberToday : ''}`}
-                >
+                <span className={`${styles.dayNumber} ${isTodayCol ? styles.dayNumberToday : ''}`}>
                   {day.getDate()}
                 </span>
               </div>
@@ -304,9 +300,7 @@ export default function CalendarView({
                                 style={{ background: cal.color || color }}
                               />
                               {cal.name}
-                              {acct && (
-                                <span className={styles.popoverMuted}> · {acct.email}</span>
-                              )}
+                              {acct && <span className={styles.popoverMuted}> · {acct.email}</span>}
                             </div>
                           )}
                           {ev.location && (
@@ -330,7 +324,6 @@ export default function CalendarView({
       </div>
 
       {/* Resize handle for all-day section */}
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div className={styles.resizeHandle} onMouseDown={onResizeStart} />
 
       {/* ── Scrollable body: time labels + hour grids ── */}
@@ -418,9 +411,7 @@ export default function CalendarView({
                               style={{ background: cal.color || color }}
                             />
                             {cal.name}
-                            {acct && (
-                              <span className={styles.popoverMuted}> · {acct.email}</span>
-                            )}
+                            {acct && <span className={styles.popoverMuted}> · {acct.email}</span>}
                           </div>
                         )}
                         {ev.location && (

@@ -56,8 +56,7 @@ pub async fn get_account_events(
     let creds = OAuthCredentials::load()?;
     let email = store::account_email(&app, &account_id)?;
 
-    let calendar_id_set: std::collections::HashSet<String> =
-        calendar_ids.into_iter().collect();
+    let calendar_id_set: std::collections::HashSet<String> = calendar_ids.into_iter().collect();
 
     // Fetch this account's calendar list
     let account_calendars = calendar_api::fetch_calendars(&creds, &account_id, &email).await?;

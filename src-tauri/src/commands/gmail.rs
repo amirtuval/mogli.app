@@ -32,14 +32,9 @@ pub async fn get_account_messages(
             .ok_or_else(|| format!("Account {account_id} not found"))?
     };
 
-    let mut messages = gmail_api::fetch_messages(
-        &creds,
-        &account_id,
-        &email,
-        &label,
-        page_token.as_deref(),
-    )
-    .await?;
+    let mut messages =
+        gmail_api::fetch_messages(&creds, &account_id, &email, &label, page_token.as_deref())
+            .await?;
 
     messages.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(messages)
@@ -62,9 +57,8 @@ pub async fn get_messages(
         let app = app.clone();
         let label = label.clone();
         let page_token = page_token.clone();
-        join_set.spawn(async move {
-            get_account_messages(app, account_id, label, page_token).await
-        });
+        join_set
+            .spawn(async move { get_account_messages(app, account_id, label, page_token).await });
     }
 
     let mut all_messages = Vec::new();
