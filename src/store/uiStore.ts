@@ -36,6 +36,7 @@ interface UIState {
   selectedLabel: string
   calendarWeekStart: string // ISO date string of the week's first day
   weekStartDay: WeekStartDay // 0 = Sunday, 1 = Monday
+  notificationsEnabled: boolean // OS notification permission granted
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -47,6 +48,7 @@ interface UIState {
   setWeekStartDay: (day: WeekStartDay) => void
   navigateWeek: (direction: -1 | 1) => void
   goToToday: () => void
+  setNotificationsEnabled: (enabled: boolean) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -57,6 +59,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedLabel: 'INBOX',
   weekStartDay: 1,
   calendarWeekStart: getWeekStart(new Date(), 1),
+  notificationsEnabled: false,
 
   setTheme: (theme) => {
     set({ theme })
@@ -94,6 +97,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       return { calendarWeekStart: `${yyyy}-${mm}-${dd}` }
     }),
   goToToday: () => set({ calendarWeekStart: getWeekStart(new Date(), get().weekStartDay) }),
+  setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
 }))
 
 /** Load the persisted theme from the backend store and apply it. */
@@ -117,5 +121,15 @@ export async function initWeekStartDay(): Promise<void> {
     }
   } catch {
     // First launch or store unavailable — keep default (Monday)
+  }
+}
+
+/** Check OS notification permission and update the store. */
+export async function initNotifications(): Promise<void> {
+  try {
+    const granted = await invoke<boolean>('is_notification_granted')
+    useUIStore.getState().setNotificationsEnabled(granted)
+  } catch {
+    // Plugin unavailable — keep default (false)
   }
 }

@@ -1,7 +1,9 @@
 use std::time::Duration;
 
 use log::{error, info, warn};
+use tauri::plugin::PermissionState;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 use tokio::time::interval;
 
 use crate::google::gmail as gmail_api;
@@ -9,6 +11,8 @@ use crate::google::oauth::OAuthCredentials;
 use crate::store::{self, AccountStore};
 
 const SYNC_INTERVAL_SECS: u64 = 120;
+/// Maximum number of new-message notifications per sync cycle (avoid spam).
+const MAX_NOTIFICATIONS_PER_SYNC: usize = 5;
 
 /// Start the background sync task that polls Gmail every 2 minutes.
 /// Uses `history.list` for incremental sync when a `historyId` is available;
@@ -16,6 +20,7 @@ const SYNC_INTERVAL_SECS: u64 = 120;
 /// or too old (Google returns 404).
 ///
 /// Emits `mail:new` event when new messages are detected.
+/// Fires OS notifications for each new message (up to 5 per cycle).
 pub fn start_background_sync(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut ticker = interval(Duration::from_secs(SYNC_INTERVAL_SECS));
@@ -87,6 +92,7 @@ async fn sync_all_accounts(app: &AppHandle) {
 ///
 /// Uses incremental `history.list` when a valid `history_id` is stored;
 /// falls back to a full inbox check otherwise.
+/// Fires OS notifications for new unread messages.
 async fn sync_account(
     creds: &OAuthCredentials,
     app: &AppHandle,
@@ -102,6 +108,12 @@ async fn sync_account(
                 if let Err(e) = store::update_history_id(app, account_id, &result.new_history_id) {
                     warn!("Failed to update historyId for {email}: {e}");
                 }
+
+                // If new messages, fetch inbox to get their metadata for notifications
+                if result.has_new_messages {
+                    notify_new_messages(creds, app, account_id, email).await;
+                }
+
                 return Ok(result.has_new_messages);
             }
             None => {
@@ -115,4 +127,64 @@ async fn sync_account(
     let messages = gmail_api::fetch_messages(creds, account_id, email, "INBOX", None).await?;
     let has_new = messages.iter().any(|m| m.unread);
     Ok(has_new)
+}
+
+/// Payload emitted to frontend when a new-mail notification fires.
+#[derive(Clone, serde::Serialize)]
+struct OpenThread {
+    thread_id: String,
+    account_id: String,
+}
+
+/// Fetch recent unread messages and fire OS notifications for them.
+async fn notify_new_messages(
+    creds: &OAuthCredentials,
+    app: &AppHandle,
+    account_id: &str,
+    email: &str,
+) {
+    // Check if notifications are permitted
+    let granted = app
+        .notification()
+        .permission_state()
+        .map(|s| s == PermissionState::Granted)
+        .unwrap_or(false);
+    if !granted {
+        return;
+    }
+
+    let messages = match gmail_api::fetch_messages(creds, account_id, email, "INBOX", None).await {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("Failed to fetch messages for notification: {e}");
+            return;
+        }
+    };
+
+    let unread: Vec<_> = messages.iter().filter(|m| m.unread).collect();
+    let count = unread.len().min(MAX_NOTIFICATIONS_PER_SYNC);
+
+    for msg in &unread[..count] {
+        // Fire OS notification
+        if let Err(e) = app
+            .notification()
+            .builder()
+            .title(&msg.from)
+            .body(&msg.subject)
+            .show()
+        {
+            warn!("Failed to send email notification: {e}");
+        }
+
+        // Emit event so frontend can navigate to the thread on click
+        if let Err(e) = app.emit(
+            "notification:open_thread",
+            OpenThread {
+                thread_id: msg.thread_id.clone(),
+                account_id: msg.account_id.clone(),
+            },
+        ) {
+            warn!("Failed to emit open_thread event: {e}");
+        }
+    }
 }

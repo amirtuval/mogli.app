@@ -12,6 +12,7 @@ describe('uiStore', () => {
       selectedLabel: 'INBOX',
       calendarWeekStart: '2026-03-02',
       weekStartDay: 1,
+      notificationsEnabled: false,
     })
   })
 
@@ -116,6 +117,21 @@ describe('uiStore', () => {
     useUIStore.getState().setWeekStartDay(1)
     expect(useUIStore.getState().weekStartDay).toBe(1)
     expect(useUIStore.getState().calendarWeekStart).toBe(getWeekStart(new Date(), 1))
+  })
+
+  it('should initialize notificationsEnabled as false', () => {
+    expect(useUIStore.getState().notificationsEnabled).toBe(false)
+  })
+
+  it('should set notificationsEnabled to true', () => {
+    useUIStore.getState().setNotificationsEnabled(true)
+    expect(useUIStore.getState().notificationsEnabled).toBe(true)
+  })
+
+  it('should set notificationsEnabled to false', () => {
+    useUIStore.setState({ notificationsEnabled: true })
+    useUIStore.getState().setNotificationsEnabled(false)
+    expect(useUIStore.getState().notificationsEnabled).toBe(false)
   })
 })
 

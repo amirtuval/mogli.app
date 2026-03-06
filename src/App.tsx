@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { listen } from '@tauri-apps/api/event'
 import type { Account } from './types/models'
-import { useUIStore, initTheme, initWeekStartDay } from './store/uiStore'
+import { useUIStore, initTheme, initWeekStartDay, initNotifications } from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
 import { useMessages } from './hooks/useMessages'
@@ -13,6 +13,7 @@ import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
 import MailView from './components/MailView'
 import CalendarView from './components/CalendarView'
+import NotificationBanner from './components/NotificationBanner'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +73,21 @@ function AppShell() {
     }
   }, [])
 
+  // Listen for notification:open_thread events to navigate to a specific thread
+  useEffect(() => {
+    const unlisten = listen<{ thread_id: string; account_id: string }>(
+      'notification:open_thread',
+      (event) => {
+        const { thread_id } = event.payload
+        useUIStore.getState().setActiveView('mail')
+        useUIStore.getState().setSelectedThreadId(thread_id)
+      },
+    )
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
   // Resolve active account objects (must be before early return — hooks are unconditional)
   const activeAccountObjects = useMemo(
     () => accounts.filter((a) => activeAccounts.includes(a.id)),
@@ -116,6 +132,7 @@ function AppShell() {
           color: 'var(--text-primary)',
         }}
       >
+        <NotificationBanner />
         <TopBar activeAccounts={activeAccountObjects} />
         {activeView === 'mail' && (
           <MailView accounts={accounts} messages={messages} isLoading={messagesLoading} />
@@ -141,6 +158,7 @@ function App() {
     applyTheme(useUIStore.getState().theme)
     initTheme()
     initWeekStartDay()
+    initNotifications()
   }, [])
 
   return (

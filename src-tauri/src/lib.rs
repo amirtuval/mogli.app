@@ -18,11 +18,15 @@ mod commands;
 mod google;
 mod keychain;
 mod models;
+mod reminders;
 mod store;
 mod sync;
 
+use reminders::NotifiedEvents;
 use store::AccountStore;
 use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
 use tauri_specta::{Builder, collect_commands};
 
 /// Create the tauri-specta builder with all commands registered.
@@ -45,7 +49,52 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::calendar::set_calendar_enabled,
         commands::calendar::get_account_events,
         commands::calendar::get_events,
+        commands::notification::is_notification_granted,
+        commands::notification::request_notification_permission,
     ])
+}
+
+/// Set up the system tray icon with a right-click context menu.
+fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let open_item = MenuItemBuilder::with_id("open", "Open Mogly").build(app)?;
+    let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&open_item, &quit_item])
+        .build()?;
+
+    TrayIconBuilder::new()
+        .tooltip("Mogly")
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => {
+                if let Some(window) = app.webview_windows().values().next() {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(window) = app.webview_windows().values().next() {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
 }
 
 /// Launch the Tauri application.
@@ -83,6 +132,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .manage(AccountStore::new())
+        .manage(NotifiedEvents::new())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
@@ -94,6 +144,12 @@ pub fn run() {
 
             // Start background sync (polls Gmail every 2 minutes)
             sync::start_background_sync(app.handle().clone());
+
+            // Start calendar reminder checks (every 60 seconds)
+            reminders::start_calendar_reminders(app.handle().clone());
+
+            // Set up system tray icon with right-click menu
+            setup_tray(app)?;
 
             // In debug builds, prefix the window title so dev is visually distinct
             #[cfg(debug_assertions)]
