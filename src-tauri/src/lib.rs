@@ -35,6 +35,7 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::auth::save_theme,
         commands::auth::load_week_start_day,
         commands::auth::save_week_start_day,
+        commands::gmail::get_account_messages,
         commands::gmail::get_messages,
         commands::gmail::get_thread,
         commands::gmail::archive_thread,
@@ -42,6 +43,7 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::gmail::mark_read,
         commands::calendar::list_calendars,
         commands::calendar::set_calendar_enabled,
+        commands::calendar::get_account_events,
         commands::calendar::get_events,
     ])
 }
@@ -68,9 +70,13 @@ pub fn run() {
             tauri_plugin_window_state::Builder::default()
                 .with_filename({
                     #[cfg(debug_assertions)]
-                    { "window-state.dev.json" }
+                    {
+                        "window-state.dev.json"
+                    }
                     #[cfg(not(debug_assertions))]
-                    { "window-state.json" }
+                    {
+                        "window-state.json"
+                    }
                 })
                 .build(),
         )

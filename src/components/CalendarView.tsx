@@ -200,19 +200,6 @@ export default function CalendarView({
     return map
   }, [events, weekDays])
 
-  if (isLoading && !events?.length) {
-    return <div className={styles.loading}>Loading calendar…</div>
-  }
-
-  const formatHour = (h: number) => h.toString().padStart(2, '0') + ':00'
-  const formatMinutes = (totalMinutes: number) => {
-    const h = Math.floor(totalMinutes / 60)
-    const m = totalMinutes % 60
-    return `${h}:${m.toString().padStart(2, '0')}`
-  }
-
-  const nowTop = (nowMinutes / 60) * ROW_HEIGHT
-
   // Auto-scroll to 7 AM on mount
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -241,6 +228,20 @@ export default function CalendarView({
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
   }, [])
+
+  // ── Early return AFTER all hooks ──
+  if (isLoading && !events?.length) {
+    return <div className={styles.loading}>Loading calendar…</div>
+  }
+
+  const formatHour = (h: number) => h.toString().padStart(2, '0') + ':00'
+  const formatMinutes = (totalMinutes: number) => {
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    return `${h}:${m.toString().padStart(2, '0')}`
+  }
+
+  const nowTop = (nowMinutes / 60) * ROW_HEIGHT
 
   return (
     <div

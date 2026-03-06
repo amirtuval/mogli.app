@@ -1,29 +1,50 @@
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { useQueries, keepPreviousData } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import type { CalEvent } from '../types/models'
 
 /**
  * Fetch events for the given accounts and calendars within a time range.
- * `weekStart` is an ISO date string (YYYY-MM-DD) for the Monday of the week.
+ * `weekStart` is an ISO date string (YYYY-MM-DD) for the first day of the week.
  *
- * Uses `keepPreviousData` so the previous week's events stay visible while
- * the new week loads, avoiding a jarring "Loading…" flash on week navigation.
+ * Issues one query **per account** in parallel so each account's events stream
+ * in independently — the first to finish renders immediately while others are
+ * still loading. Uses `keepPreviousData` so the previous week's events stay
+ * visible during navigation.
  */
 export function useEvents(accountIds: string[], calendarIds: string[], weekStart: string) {
-  // Compute time range: Monday 00:00 UTC → Sunday 23:59:59 UTC
   const timeMin = Math.floor(new Date(weekStart + 'T00:00:00Z').getTime() / 1000)
   const timeMax = timeMin + 7 * 24 * 60 * 60
 
-  return useQuery<CalEvent[]>({
-    queryKey: ['events', accountIds, calendarIds, weekStart],
-    queryFn: () =>
-      invoke<CalEvent[]>('get_events', {
-        accountIds,
-        calendarIds,
-        timeMin,
-        timeMax,
-      }),
-    enabled: accountIds.length > 0 && calendarIds.length > 0,
-    placeholderData: keepPreviousData,
+  const enabled = accountIds.length > 0 && calendarIds.length > 0
+
+  const queries = useQueries({
+    queries: accountIds.map((accountId) => ({
+      queryKey: ['events', accountId, calendarIds, weekStart],
+      queryFn: () =>
+        invoke<CalEvent[]>('get_account_events', {
+          accountId,
+          calendarIds,
+          timeMin,
+          timeMax,
+        }),
+      enabled,
+      placeholderData: keepPreviousData,
+    })),
   })
+
+  // Merge all per-account results into a single sorted array
+  const data = useMemo(() => {
+    const merged: CalEvent[] = []
+    for (const q of queries) {
+      if (q.data) merged.push(...q.data)
+    }
+    merged.sort((a, b) => a.start - b.start)
+    return merged.length > 0 ? merged : undefined
+  }, [queries])
+
+  const isLoading = queries.some((q) => q.isLoading)
+  const isFetching = queries.some((q) => q.isFetching)
+
+  return { data, isLoading, isFetching }
 }
