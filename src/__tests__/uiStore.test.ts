@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useUIStore, getMonday } from '../store/uiStore'
+import { useUIStore, getWeekStart, getMonday } from '../store/uiStore'
 
 describe('uiStore', () => {
   beforeEach(() => {
@@ -11,6 +11,7 @@ describe('uiStore', () => {
       selectedThreadId: null,
       selectedLabel: 'INBOX',
       calendarWeekStart: '2026-03-02',
+      weekStartDay: 1,
     })
   })
 
@@ -102,26 +103,50 @@ describe('uiStore', () => {
     useUIStore.setState({ calendarWeekStart: '2025-01-01' })
     useUIStore.getState().goToToday()
     const weekStart = useUIStore.getState().calendarWeekStart
-    // Should be this week's Monday
+    const { weekStartDay } = useUIStore.getState()
     expect(weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-    expect(weekStart).toBe(getMonday(new Date()))
+    expect(weekStart).toBe(getWeekStart(new Date(), weekStartDay))
   })
 })
 
-describe('getMonday', () => {
-  it('returns Monday for a Monday input', () => {
-    expect(getMonday(new Date('2026-03-02'))).toBe('2026-03-02')
+describe('getWeekStart', () => {
+  // 2026-03-02 is a Monday, 2026-03-01 is a Sunday
+
+  it('returns Monday for Monday start (Monday input)', () => {
+    expect(getWeekStart(new Date('2026-03-02'), 1)).toBe('2026-03-02')
   })
 
-  it('returns Monday for a Wednesday input', () => {
+  it('returns Monday for Monday start (Wednesday input)', () => {
+    expect(getWeekStart(new Date('2026-03-04'), 1)).toBe('2026-03-02')
+  })
+
+  it('returns Monday for Monday start (Sunday input)', () => {
+    expect(getWeekStart(new Date('2026-03-08'), 1)).toBe('2026-03-02')
+  })
+
+  it('returns Monday for Monday start (Saturday input)', () => {
+    expect(getWeekStart(new Date('2026-03-07'), 1)).toBe('2026-03-02')
+  })
+
+  it('returns Sunday for Sunday start (Sunday input)', () => {
+    expect(getWeekStart(new Date('2026-03-01'), 0)).toBe('2026-03-01')
+  })
+
+  it('returns Sunday for Sunday start (Wednesday input)', () => {
+    expect(getWeekStart(new Date('2026-03-04'), 0)).toBe('2026-03-01')
+  })
+
+  it('returns Sunday for Sunday start (Saturday input)', () => {
+    expect(getWeekStart(new Date('2026-03-07'), 0)).toBe('2026-03-01')
+  })
+
+  it('returns previous Sunday for Sunday start (Monday input)', () => {
+    expect(getWeekStart(new Date('2026-03-02'), 0)).toBe('2026-03-01')
+  })
+})
+
+describe('getMonday (deprecated)', () => {
+  it('still works as alias for getWeekStart with Monday', () => {
     expect(getMonday(new Date('2026-03-04'))).toBe('2026-03-02')
-  })
-
-  it('returns Monday for a Sunday input', () => {
-    expect(getMonday(new Date('2026-03-08'))).toBe('2026-03-02')
-  })
-
-  it('returns Monday for a Saturday input', () => {
-    expect(getMonday(new Date('2026-03-07'))).toBe('2026-03-02')
   })
 })

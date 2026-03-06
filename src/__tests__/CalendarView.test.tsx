@@ -56,23 +56,25 @@ describe('CalendarView', () => {
       theme: 'dark',
       activeView: 'calendar',
       calendarWeekStart: MONDAY,
+      weekStartDay: 1,
     })
   })
 
-  it('renders day headers Mon–Sun', () => {
+  it('renders 7 day headers with correct names from dates', () => {
     render(
       <Wrapper>
         <CalendarView events={[]} accounts={MOCK_ACCOUNTS} isLoading={false} />
       </Wrapper>,
     )
 
-    expect(screen.getByText('Mon')).toBeDefined()
-    expect(screen.getByText('Tue')).toBeDefined()
-    expect(screen.getByText('Wed')).toBeDefined()
-    expect(screen.getByText('Thu')).toBeDefined()
-    expect(screen.getByText('Fri')).toBeDefined()
-    expect(screen.getByText('Sat')).toBeDefined()
-    expect(screen.getByText('Sun')).toBeDefined()
+    // Day names are derived from the actual dates via toLocaleDateString
+    const start = new Date(MONDAY + 'T00:00:00')
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start)
+      d.setDate(start.getDate() + i)
+      const name = d.toLocaleDateString(undefined, { weekday: 'short' })
+      expect(screen.getByText(name)).toBeDefined()
+    }
   })
 
   it('renders time slots 07:00–21:00', () => {

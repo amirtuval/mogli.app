@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback } from 'react'
-import { useUIStore, getMonday } from '../store/uiStore'
+import { useUIStore, getWeekStart } from '../store/uiStore'
 import styles from './MiniCal.module.css'
 
-const DAY_HEADERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+const DAY_HEADERS_MON = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+const DAY_HEADERS_SUN = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 const MONTH_NAMES = [
   'January',
@@ -21,7 +22,10 @@ const MONTH_NAMES = [
 
 export default function MiniCal() {
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
+  const weekStartDay = useUIStore((s) => s.weekStartDay)
   const setCalendarWeekStart = useUIStore((s) => s.setCalendarWeekStart)
+
+  const dayHeaders = weekStartDay === 0 ? DAY_HEADERS_SUN : DAY_HEADERS_MON
 
   // Track the displayed month independently from the calendar week
   const [displayYear, setDisplayYear] = useState(() => new Date().getFullYear())
@@ -32,7 +36,7 @@ export default function MiniCal() {
   const todayMonth = today.getMonth()
   const todayYear = today.getFullYear()
 
-  // Compute the viewed week range (Mon 00:00 – Sun 23:59)
+  // Compute the viewed week range (first day 00:00 – last day 23:59)
   const viewedWeek = useMemo(() => {
     const start = new Date(calendarWeekStart + 'T00:00:00')
     const end = new Date(start)
@@ -43,15 +47,15 @@ export default function MiniCal() {
   const cells = useMemo(() => {
     // First day of the month: getDay() → 0=Sun,1=Mon,...6=Sat
     const firstDay = new Date(displayYear, displayMonth, 1).getDay()
-    // Shift so Monday=0: Sun(0)→6, Mon(1)→0, Tue(2)→1, ...
-    const offset = firstDay === 0 ? 6 : firstDay - 1
+    // Compute offset based on week start day
+    const offset = (firstDay - weekStartDay + 7) % 7
     const daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate()
 
     return Array.from({ length: 42 }, (_, i) => {
       const d = i - offset + 1
       return d >= 1 && d <= daysInMonth ? d : null
     })
-  }, [displayYear, displayMonth])
+  }, [displayYear, displayMonth, weekStartDay])
 
   const navigateMonth = useCallback(
     (delta: number) => {
@@ -73,9 +77,9 @@ export default function MiniCal() {
   const handleDayClick = useCallback(
     (day: number) => {
       const clicked = new Date(displayYear, displayMonth, day)
-      setCalendarWeekStart(getMonday(clicked))
+      setCalendarWeekStart(getWeekStart(clicked, weekStartDay))
     },
-    [displayYear, displayMonth, setCalendarWeekStart],
+    [displayYear, displayMonth, setCalendarWeekStart, weekStartDay],
   )
 
   const isToday = (day: number) =>
@@ -102,7 +106,7 @@ export default function MiniCal() {
         </div>
       </div>
       <div className={styles.grid}>
-        {DAY_HEADERS.map((d, i) => (
+        {dayHeaders.map((d, i) => (
           <div key={`h-${i}`} className={styles.dayHeader}>
             {d}
           </div>

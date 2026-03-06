@@ -3,7 +3,6 @@ import type { CalEvent, Account } from '../types/models'
 import { useUIStore } from '../store/uiStore'
 import styles from './CalendarView.module.css'
 
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 07:00–22:00
 const ROW_HEIGHT = 56
 
@@ -27,6 +26,8 @@ interface LayoutEvent {
   event: CalEvent
   /** 0-based column index within an overlap group */
   column: number
+  /** How many columns this event spans (expands right into empty columns) */
+  span: number
   /** Total number of columns in this overlap group */
   totalColumns: number
 }
@@ -35,13 +36,11 @@ interface LayoutEvent {
  * Compute side-by-side layout for overlapping timed events.
  *
  * Algorithm:
- * 1. Sort by start ascending; break ties by longer duration first so long
- *    events anchor the layout.
- * 2. Build transitive overlap clusters — events A and B are in the same
- *    cluster if any chain of pairwise-overlapping events connects them.
+ * 1. Sort by start ascending; break ties by longer duration first.
+ * 2. Build transitive overlap clusters.
  * 3. Within each cluster, greedily assign columns (first-fit).
- * 4. Every event in a cluster shares the same totalColumns (= max columns
- *    used in that cluster).
+ * 4. Each event expands rightward into consecutive empty columns
+ *    (no other event in that column overlaps its time range).
  */
 function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
   if (timedEvents.length === 0) return []
@@ -57,11 +56,9 @@ function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
 
   for (const ev of sorted) {
     if (ev.start < clusterEnd) {
-      // Overlaps with something already in the cluster
       currentCluster.push(ev)
       clusterEnd = Math.max(clusterEnd, ev.end)
     } else {
-      // New cluster
       if (currentCluster.length > 0) clusters.push(currentCluster)
       currentCluster = [ev]
       clusterEnd = ev.end
@@ -73,12 +70,10 @@ function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
   const result: LayoutEvent[] = []
 
   for (const cluster of clusters) {
-    // Each column tracks the end time of the last event placed in it
     const columnEnds: number[] = []
     const assignments: { event: CalEvent; column: number }[] = []
 
     for (const ev of cluster) {
-      // Find the first column where this event doesn't overlap
       let col = -1
       for (let c = 0; c < columnEnds.length; c++) {
         if (ev.start >= columnEnds[c]) {
@@ -97,8 +92,19 @@ function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
 
     const totalColumns = columnEnds.length
 
+    // ── Step 3: expand events into empty columns to the right ──
     for (const { event, column } of assignments) {
-      result.push({ event, column, totalColumns })
+      let span = 1
+      for (let c = column + 1; c < totalColumns; c++) {
+        // Check if any other event in column c overlaps with this event
+        const blocked = assignments.some(
+          (other) =>
+            other.column === c && other.event.start < event.end && other.event.end > event.start,
+        )
+        if (blocked) break
+        span++
+      }
+      result.push({ event, column, span, totalColumns })
     }
   }
 
@@ -222,7 +228,9 @@ export default function CalendarView({
           <div key={di} className={styles.dayColumn}>
             {/* Day header */}
             <div className={styles.dayHeader}>
-              <span className={styles.dayName}>{DAY_NAMES[di]}</span>
+              <span className={styles.dayName}>
+                {day.toLocaleDateString(undefined, { weekday: 'short' })}
+              </span>
               <span className={`${styles.dayNumber} ${isTodayCol ? styles.dayNumberToday : ''}`}>
                 {day.getDate()}
               </span>
@@ -257,7 +265,7 @@ export default function CalendarView({
               ))}
 
               {/* Timed events */}
-              {dayData.timed.map(({ event: ev, column, totalColumns }) => {
+              {dayData.timed.map(({ event: ev, column, span, totalColumns }) => {
                 const startDate = new Date(ev.start * 1000)
                 const endDate = new Date(ev.end * 1000)
                 const startMinutes = startDate.getHours() * 60 + startDate.getMinutes()
@@ -270,9 +278,10 @@ export default function CalendarView({
                 const startStr = formatMinutes(startMinutes)
                 const endStr = formatMinutes(endMinutes)
 
-                // Side-by-side: divide the column width evenly
-                const widthPercent = 100 / totalColumns
-                const leftPercent = column * widthPercent
+                // Side-by-side: divide the column width evenly, expand by span
+                const colWidth = 100 / totalColumns
+                const leftPercent = column * colWidth
+                const widthPercent = colWidth * span
 
                 return (
                   <div
