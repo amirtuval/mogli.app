@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { Account } from './types/models'
 import { useUIStore, initTheme, initWeekStartDay, initNotifications } from './store/uiStore'
@@ -98,6 +99,13 @@ function AppShell() {
     () => messages?.filter((m) => m.unread && activeAccounts.includes(m.account_id)).length ?? 0,
     [messages, activeAccounts],
   )
+
+  // Update tray tooltip with unread count
+  useEffect(() => {
+    invoke('set_tray_badge', { count: unreadCount }).catch(() => {
+      // Tray not available — ignore
+    })
+  }, [unreadCount])
 
   // Show welcome page if no accounts
   if (accounts.length === 0) {

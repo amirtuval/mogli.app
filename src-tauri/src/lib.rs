@@ -52,6 +52,7 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::calendar::get_events,
         commands::notification::is_notification_granted,
         commands::notification::request_notification_permission,
+        commands::notification::set_tray_badge,
     ])
 }
 
@@ -63,7 +64,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .items(&[&open_item, &quit_item])
         .build()?;
 
-    TrayIconBuilder::new()
+    TrayIconBuilder::with_id("main-tray")
         .tooltip("Mogly")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
