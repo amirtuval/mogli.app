@@ -1,9 +1,11 @@
-import type { Account } from '../types/models'
+import type { Account, Calendar } from '../types/models'
 import { MAIL_LABELS } from '../types/models'
-import type { Theme, AppView } from '../store/uiStore'
+import type { Theme, AppView, WeekStartDay } from '../store/uiStore'
 import { useUIStore } from '../store/uiStore'
 import { THEME_META } from '../styles/theme'
 import { useAddAccount } from '../hooks/useAccounts'
+import MiniCal from './MiniCal'
+import CalendarList from './CalendarList'
 import styles from './Sidebar.module.css'
 
 const THEME_KEYS: Theme[] = ['light', 'dark', 'ultraDark']
@@ -11,9 +13,10 @@ const THEME_KEYS: Theme[] = ['light', 'dark', 'ultraDark']
 interface SidebarProps {
   accounts: Account[]
   unreadCount: number
+  calendars: Calendar[]
 }
 
-export default function Sidebar({ accounts, unreadCount }: SidebarProps) {
+export default function Sidebar({ accounts, unreadCount, calendars }: SidebarProps) {
   const theme = useUIStore((s) => s.theme)
   const activeView = useUIStore((s) => s.activeView)
   const activeAccounts = useUIStore((s) => s.activeAccounts)
@@ -22,6 +25,8 @@ export default function Sidebar({ accounts, unreadCount }: SidebarProps) {
   const setActiveView = useUIStore((s) => s.setActiveView)
   const toggleAccount = useUIStore((s) => s.toggleAccount)
   const setSelectedLabel = useUIStore((s) => s.setSelectedLabel)
+  const weekStartDay = useUIStore((s) => s.weekStartDay)
+  const setWeekStartDay = useUIStore((s) => s.setWeekStartDay)
   const addAccount = useAddAccount()
 
   const navItems: { id: AppView; icon: string; label: string; badge: number }[] = [
@@ -127,7 +132,28 @@ export default function Sidebar({ accounts, unreadCount }: SidebarProps) {
             ))}
           </div>
         )}
-        {/* Calendar sidebar content will be added in Phase 3 */}
+        {activeView === 'calendar' && (
+          <>
+            <div className={styles.miniCalSection}>
+              <MiniCal />
+            </div>
+            <div className={styles.weekStartSection}>
+              <span className={styles.weekStartLabel}>Week starts on</span>
+              <div className={styles.weekStartToggle}>
+                {([0, 1] as WeekStartDay[]).map((day) => (
+                  <button
+                    key={day}
+                    className={`${styles.weekStartBtn} ${weekStartDay === day ? styles.weekStartBtnActive : ''}`}
+                    onClick={() => setWeekStartDay(day)}
+                  >
+                    {day === 0 ? 'Sun' : 'Mon'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <CalendarList accounts={accounts} calendars={calendars} />
+          </>
+        )}
       </div>
     </aside>
   )

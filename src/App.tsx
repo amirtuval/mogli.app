@@ -2,14 +2,17 @@ import { useEffect, useMemo } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { listen } from '@tauri-apps/api/event'
 import type { Account } from './types/models'
-import { useUIStore, initTheme } from './store/uiStore'
+import { useUIStore, initTheme, initWeekStartDay } from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
 import { useMessages } from './hooks/useMessages'
+import { useAllCalendars } from './hooks/useCalendars'
+import { useEvents } from './hooks/useEvents'
 import WelcomePage from './components/WelcomePage'
 import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
 import MailView from './components/MailView'
+import CalendarView from './components/CalendarView'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,10 +28,27 @@ function AppShell() {
   const activeView = useUIStore((s) => s.activeView)
   const activeAccounts = useUIStore((s) => s.activeAccounts)
   const selectedLabel = useUIStore((s) => s.selectedLabel)
+  const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
   const setActiveAccounts = useUIStore((s) => s.setActiveAccounts)
 
   const { data: accounts = [] } = useAccounts()
   const { data: messages, isLoading: messagesLoading } = useMessages(activeAccounts, selectedLabel)
+
+  // Fetch calendars for all active accounts
+  const { data: calendars = [] } = useAllCalendars(activeAccounts)
+
+  // Compute enabled calendar IDs for event fetching
+  const enabledCalendarIds = useMemo(
+    () => calendars.filter((c) => c.enabled).map((c) => c.id),
+    [calendars],
+  )
+
+  // Fetch events for the current week
+  const {
+    data: events,
+    isLoading: eventsLoading,
+    isFetching: eventsFetching,
+  } = useEvents(activeAccounts, enabledCalendarIds, calendarWeekStart)
 
   // Apply theme CSS vars whenever theme changes
   useEffect(() => {
@@ -84,7 +104,7 @@ function AppShell() {
         overflow: 'hidden',
       }}
     >
-      <Sidebar accounts={accounts} unreadCount={unreadCount} />
+      <Sidebar accounts={accounts} unreadCount={unreadCount} calendars={calendars} />
       <main
         style={{
           flex: 1,
@@ -96,25 +116,18 @@ function AppShell() {
           color: 'var(--text-primary)',
         }}
       >
+        <TopBar activeAccounts={activeAccountObjects} />
         {activeView === 'mail' && (
-          <>
-            <TopBar activeAccounts={activeAccountObjects} />
-            <MailView accounts={accounts} messages={messages} isLoading={messagesLoading} />
-          </>
+          <MailView accounts={accounts} messages={messages} isLoading={messagesLoading} />
         )}
         {activeView === 'calendar' && (
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 13,
-            }}
-          >
-            Calendar view will be added in Phase 3
-          </div>
+          <CalendarView
+            events={events}
+            calendars={calendars}
+            accounts={accounts}
+            isLoading={eventsLoading}
+            isFetching={eventsFetching}
+          />
         )}
       </main>
     </div>
@@ -127,6 +140,7 @@ function App() {
     // Apply default immediately, then override with persisted value
     applyTheme(useUIStore.getState().theme)
     initTheme()
+    initWeekStartDay()
   }, [])
 
   return (

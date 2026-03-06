@@ -5,7 +5,44 @@ use crate::google::oauth::OAuthCredentials;
 use crate::models::{MessageMeta, Thread};
 use crate::store::AccountStore;
 
+/// Fetch messages for a single account and label.
+///
+/// The frontend calls this once per account so results stream in as each
+/// account completes independently.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_account_messages(
+    app: AppHandle,
+    account_id: String,
+    label: String,
+    page_token: Option<String>,
+) -> Result<Vec<MessageMeta>, String> {
+    let creds = OAuthCredentials::load()?;
+
+    let email = {
+        let state = app.state::<AccountStore>();
+        let guard = state
+            .accounts
+            .lock()
+            .map_err(|e| format!("Lock error: {e}"))?;
+        guard
+            .iter()
+            .find(|a| a.id == account_id)
+            .map(|a| a.email.clone())
+            .ok_or_else(|| format!("Account {account_id} not found"))?
+    };
+
+    let mut messages =
+        gmail_api::fetch_messages(&creds, &account_id, &email, &label, page_token.as_deref())
+            .await?;
+
+    messages.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(messages)
+}
+
 /// Fetch inbox messages for the given accounts and label.
+///
+/// Kept for backwards compatibility. Internally parallelises across accounts.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_messages(
@@ -14,41 +51,25 @@ pub async fn get_messages(
     label: String,
     page_token: Option<String>,
 ) -> Result<Vec<MessageMeta>, String> {
-    let creds = OAuthCredentials::load()?;
+    let mut join_set = tokio::task::JoinSet::new();
 
-    let state = app.state::<AccountStore>();
-    let accounts = {
-        let guard = state
-            .accounts
-            .lock()
-            .map_err(|e| format!("Lock error: {e}"))?;
-        guard
-            .iter()
-            .filter(|a| account_ids.contains(&a.id))
-            .cloned()
-            .collect::<Vec<_>>()
-    };
+    for account_id in account_ids {
+        let app = app.clone();
+        let label = label.clone();
+        let page_token = page_token.clone();
+        join_set
+            .spawn(async move { get_account_messages(app, account_id, label, page_token).await });
+    }
 
     let mut all_messages = Vec::new();
-    for account in &accounts {
-        match gmail_api::fetch_messages(
-            &creds,
-            &account.id,
-            &account.email,
-            &label,
-            page_token.as_deref(),
-        )
-        .await
-        {
-            Ok(messages) => all_messages.extend(messages),
-            Err(e) => {
-                log::error!("Failed to fetch messages for {}: {e}", account.email);
-                // Continue with other accounts
-            }
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(messages)) => all_messages.extend(messages),
+            Ok(Err(e)) => log::error!("Failed to fetch account messages: {e}"),
+            Err(e) => log::error!("Task panicked: {e}"),
         }
     }
 
-    // Sort all messages by date descending (unified inbox)
     all_messages.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(all_messages)
 }

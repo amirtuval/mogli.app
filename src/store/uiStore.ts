@@ -4,7 +4,29 @@ import { invoke } from '@tauri-apps/api/core'
 export type Theme = 'light' | 'dark' | 'ultraDark'
 export type AppView = 'mail' | 'calendar'
 
+/** 0 = Sunday, 1 = Monday */
+export type WeekStartDay = 0 | 1
+
 const VALID_THEMES: Theme[] = ['light', 'dark', 'ultraDark']
+
+/**
+ * Get the first day of the week containing the given date.
+ * `weekStartDay`: 0 = Sunday, 1 = Monday.
+ * Returns an ISO date string YYYY-MM-DD.
+ */
+export function getWeekStart(date: Date, weekStartDay: WeekStartDay = 1): string {
+  const d = new Date(date)
+  const day = d.getDay() // 0=Sun … 6=Sat
+  const diff = (day - weekStartDay + 7) % 7
+  d.setDate(d.getDate() - diff)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+/** @deprecated Use getWeekStart instead */
+export const getMonday = (date: Date): string => getWeekStart(date, 1)
 
 interface UIState {
   theme: Theme
@@ -12,6 +34,8 @@ interface UIState {
   activeAccounts: string[] // account IDs that are toggled on
   selectedThreadId: string | null
   selectedLabel: string
+  calendarWeekStart: string // ISO date string of the week's first day
+  weekStartDay: WeekStartDay // 0 = Sunday, 1 = Monday
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -19,14 +43,20 @@ interface UIState {
   setActiveAccounts: (accountIds: string[]) => void
   setSelectedThreadId: (threadId: string | null) => void
   setSelectedLabel: (label: string) => void
+  setCalendarWeekStart: (start: string) => void
+  setWeekStartDay: (day: WeekStartDay) => void
+  navigateWeek: (direction: -1 | 1) => void
+  goToToday: () => void
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>((set, get) => ({
   theme: 'dark',
   activeView: 'mail',
   activeAccounts: [],
   selectedThreadId: null,
   selectedLabel: 'INBOX',
+  weekStartDay: 1,
+  calendarWeekStart: getWeekStart(new Date(), 1),
 
   setTheme: (theme) => {
     set({ theme })
@@ -45,6 +75,25 @@ export const useUIStore = create<UIState>((set) => ({
   setActiveAccounts: (accountIds) => set({ activeAccounts: accountIds }),
   setSelectedThreadId: (threadId) => set({ selectedThreadId: threadId }),
   setSelectedLabel: (label) => set({ selectedLabel: label }),
+  setCalendarWeekStart: (start) => set({ calendarWeekStart: start }),
+  setWeekStartDay: (day) => {
+    const weekStart = getWeekStart(new Date(), day)
+    set({ weekStartDay: day, calendarWeekStart: weekStart })
+    // Persist to disk (fire-and-forget)
+    invoke('save_week_start_day', { day }).catch((e: unknown) =>
+      console.warn('Failed to persist week start day:', e),
+    )
+  },
+  navigateWeek: (direction) =>
+    set((state) => {
+      const [y, m, d] = state.calendarWeekStart.split('-').map(Number)
+      const date = new Date(y, m - 1, d + direction * 7)
+      const yyyy = date.getFullYear()
+      const mm = String(date.getMonth() + 1).padStart(2, '0')
+      const dd = String(date.getDate()).padStart(2, '0')
+      return { calendarWeekStart: `${yyyy}-${mm}-${dd}` }
+    }),
+  goToToday: () => set({ calendarWeekStart: getWeekStart(new Date(), get().weekStartDay) }),
 }))
 
 /** Load the persisted theme from the backend store and apply it. */
@@ -56,5 +105,17 @@ export async function initTheme(): Promise<void> {
     }
   } catch {
     // First launch or store unavailable — keep default
+  }
+}
+
+/** Load the persisted week start day from the backend store and apply it. */
+export async function initWeekStartDay(): Promise<void> {
+  try {
+    const saved = await invoke<number>('load_week_start_day')
+    if (saved === 0 || saved === 1) {
+      useUIStore.getState().setWeekStartDay(saved as WeekStartDay)
+    }
+  } catch {
+    // First launch or store unavailable — keep default (Monday)
   }
 }

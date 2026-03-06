@@ -50,6 +50,28 @@ export interface Attachment {
   size: number
 }
 
+export interface Calendar {
+  id: string
+  account_id: string
+  name: string
+  color: string
+  enabled: boolean
+  primary: boolean
+}
+
+export interface CalEvent {
+  id: string
+  account_id: string
+  calendar_id: string
+  title: string
+  start: number
+  end: number
+  all_day: boolean
+  location: string | null
+  description: string | null
+  color: string | null
+}
+
 export const ACCOUNT_COLORS = [
   '#4f9cf9', // blue
   '#f97316', // orange

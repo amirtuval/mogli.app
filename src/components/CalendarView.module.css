@@ -1,0 +1,300 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Sticky header row: day names + all-day events ── */
+.header {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.headerGutter {
+  width: 50px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+}
+
+.headerCell {
+  flex: 1;
+  min-width: 100px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.headerCell:last-child {
+  border-right: none;
+}
+
+/* ── Resize handle between header and scroll body ── */
+.resizeHandle {
+  height: 4px;
+  cursor: ns-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.resizeHandle:hover {
+  background: var(--text-muted);
+}
+
+/* ── Scrollable body: time labels + hour grids ── */
+.scrollBody {
+  display: flex;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ── Time column ── */
+.timeColumn {
+  width: 50px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+}
+
+.timeSlot {
+  height: 56px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 4px 7px 0 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.timeLabel {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ── Day columns (inside scroll body) ── */
+.dayColumn {
+  flex: 1;
+  border-right: 1px solid var(--border);
+  min-width: 100px;
+}
+
+.dayColumn:last-child {
+  border-right: none;
+}
+
+/* ── Day header ── */
+.dayHeader {
+  height: 38px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.dayName {
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dayNumber {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.dayNumberToday {
+  background: #4f9cf9;
+  color: #fff;
+}
+
+/* ── All-day events strip ── */
+.allDayStrip {
+  padding: 2px 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.allDayEvent {
+  position: relative;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+
+.allDayEvent:hover {
+  opacity: 0.92;
+  z-index: 10;
+  overflow: visible;
+}
+
+.allDayEvent:hover .eventPopover {
+  display: block;
+}
+
+/* ── Hour grid + events ── */
+.hourGrid {
+  flex: 1;
+  position: relative;
+}
+
+.hourRow {
+  height: 56px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* ── Event block ── */
+.eventBlock {
+  position: absolute;
+  border-radius: 4px;
+  padding: 4px 7px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.1s;
+  box-sizing: border-box;
+}
+
+.eventBlock:hover {
+  opacity: 0.92;
+  z-index: 10;
+  overflow: visible;
+}
+
+.eventTitle {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.eventTime {
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* ── Event hover popover ── */
+.eventPopover {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  width: 240px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  padding: 10px 12px;
+  z-index: 100;
+  cursor: default;
+}
+
+.eventPopoverAbove {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.eventBlock:hover .eventPopover {
+  display: block;
+}
+
+.popoverTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.popoverRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.popoverIcon {
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.popoverDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.popoverMuted {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.popoverDesc {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+  line-height: 1.5;
+  max-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre-line;
+}
+
+/* ── Now line ── */
+.nowLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #4f9cf9;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.nowDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4f9cf9;
+  margin-left: -3.5px;
+}
+
+/* ── Loading ── */
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}

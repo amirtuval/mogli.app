@@ -241,3 +241,47 @@
   padding: 1px 5px;
   border-radius: 8px;
 }
+
+/* ── Calendar sidebar ── */
+.miniCalSection {
+  border-bottom: 1px solid var(--border);
+}
+
+.weekStartSection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.weekStartLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.weekStartToggle {
+  display: flex;
+  gap: 3px;
+}
+
+.weekStartBtn {
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--bg-btn);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.weekStartBtn:hover {
+  opacity: 0.75;
+}
+
+.weekStartBtnActive {
+  background: #4f9cf9;
+  color: #fff;
+}
