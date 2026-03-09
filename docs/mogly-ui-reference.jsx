@@ -12,11 +12,14 @@
  * - Theme system (light / dark / ultra-dark via CSS custom properties)
  * - Account toggling (per-account color coding throughout)
  * - Sidebar: mode-specific content (labels vs mini-cal + view picker)
- * - TopBar: mode-specific content (search vs week nav)
+ * - TopBar: mode-specific content (search bar vs week nav)
+ * - Search bar (cross-account search with results replacing list)
+ * - Mail filters (unread-only, starred-only filter chips)
+ * - Mark read/unread toggle (with auto-mark-read setting)
+ * - Compose modal (new email, reply, forward)
  *
  * NOT included here — to be built separately:
  * - Welcome / onboarding page (WelcomePage.tsx)
- * - Compose modal
  * - Real data — all data below is hardcoded mock data
  * - Tauri command calls — use commands from src/types/bindings.ts
  *
@@ -28,6 +31,7 @@
  * - Email list div    → EmailList.tsx
  * - Email detail div  → EmailDetail.tsx
  * - Calendar grid div → CalendarView.tsx
+ * - ComposeModal      → ComposeModal.tsx
  *
  * Design tokens:
  * - All colors via CSS custom properties (see THEMES object below)
@@ -45,7 +49,7 @@
  * - Font sizes: 9px (labels), 10px (meta/time), 11px (snippets), 12px (body), 13px (detail), 15px (subject)
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 // ─── Themes ───────────────────────────────────────────────────────────────────
 const THEMES = {
@@ -287,6 +291,169 @@ function MiniCal({ isLight }) {
   );
 }
 
+// ─── Compose Modal ────────────────────────────────────────────────────────────
+// Component: ComposeModal.tsx
+// Supports three modes: new, reply, forward
+// Real impl calls: commands.sendMessage()
+function ComposeModal({ context, accounts, activeAccounts, onClose, isLight }) {
+  const [fromAccount, setFromAccount] = useState(
+    context?.email ? context.email.account : [...activeAccounts][0] || "work"
+  );
+  const [to, setTo]           = useState(context?.mode === "reply" ? context.email.from : "");
+  const [showCc, setShowCc]   = useState(false);
+  const [cc, setCc]           = useState("");
+  const [subject, setSubject] = useState(
+    context?.mode === "reply"  ? `Re: ${context.email.subject}` :
+    context?.mode === "forward" ? `Fwd: ${context.email.subject}` :
+    ""
+  );
+  const [body, setBody] = useState(
+    context?.mode === "reply"  ? `
+
+──────────
+On ${context.email.time}, ${context.email.from} wrote:
+> ${context.email.snippet}` :
+    context?.mode === "forward" ? `
+
+──────────
+Forwarded message from ${context.email.from}:
+
+${context.email.snippet}` :
+    ""
+  );
+
+  const acct = (id) => accounts.find(a => a.id === id);
+  const title = context?.mode === "reply"  ? `Re: ${context.email.subject}` :
+                context?.mode === "forward" ? `Fwd: ${context.email.subject}` :
+                "New Message";
+
+  return (
+    <div style={{
+      position:"fixed", inset:0, zIndex:1000,
+      background:"rgba(0,0,0,0.5)", display:"flex",
+      alignItems:"center", justifyContent:"center",
+    }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        width:560, maxHeight:"80vh", display:"flex", flexDirection:"column",
+        background:"var(--bg-panel)", border:"1px solid var(--border)",
+        borderRadius:10, overflow:"hidden",
+        boxShadow:"0 16px 48px rgba(0,0,0,0.3)",
+      }}>
+        {/* Header */}
+        <div style={{
+          display:"flex", alignItems:"center", padding:"12px 16px",
+          borderBottom:"1px solid var(--border)", flexShrink:0,
+        }}>
+          <span style={{ fontSize:13, fontWeight:600, color:"var(--text-primary)", flex:1 }}>{title}</span>
+          <button onClick={onClose} style={{
+            background:"none", border:"none", color:"var(--text-muted)",
+            fontSize:16, cursor:"pointer", padding:"0 4px", fontFamily:"inherit",
+            lineHeight:1,
+          }}>✕</button>
+        </div>
+
+        {/* Fields */}
+        <div style={{ padding:"12px 16px 0", flexShrink:0 }}>
+          {/* From */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+            <span style={{ fontSize:11, color:"var(--text-muted)", width:36 }}>From</span>
+            <select
+              value={fromAccount}
+              onChange={(e) => setFromAccount(e.target.value)}
+              style={{
+                flex:1, background:"var(--bg-input)", border:"1px solid var(--border)",
+                borderRadius:4, padding:"5px 8px", fontSize:12,
+                color:"var(--text-primary)", fontFamily:"inherit", outline:"none",
+              }}
+            >
+              {[...activeAccounts].map(id => {
+                const a = acct(id);
+                return a ? <option key={id} value={id}>● {a.label} — {a.email}</option> : null;
+              })}
+            </select>
+          </div>
+          {/* To */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+            <span style={{ fontSize:11, color:"var(--text-muted)", width:36 }}>To</span>
+            <input
+              value={to} onChange={(e) => setTo(e.target.value)}
+              placeholder="recipient@example.com"
+              style={{
+                flex:1, background:"var(--bg-input)", border:"1px solid var(--border)",
+                borderRadius:4, padding:"5px 8px", fontSize:12,
+                color:"var(--text-primary)", fontFamily:"inherit", outline:"none",
+              }}
+            />
+            {!showCc && (
+              <button onClick={() => setShowCc(true)} style={{
+                background:"none", border:"none", color:"var(--text-muted)",
+                fontSize:11, cursor:"pointer", fontFamily:"inherit",
+              }}>CC</button>
+            )}
+          </div>
+          {/* CC (expandable) */}
+          {showCc && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <span style={{ fontSize:11, color:"var(--text-muted)", width:36 }}>CC</span>
+              <input
+                value={cc} onChange={(e) => setCc(e.target.value)}
+                placeholder="cc@example.com"
+                style={{
+                  flex:1, background:"var(--bg-input)", border:"1px solid var(--border)",
+                  borderRadius:4, padding:"5px 8px", fontSize:12,
+                  color:"var(--text-primary)", fontFamily:"inherit", outline:"none",
+                }}
+              />
+            </div>
+          )}
+          {/* Subject */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+            <span style={{ fontSize:11, color:"var(--text-muted)", width:36 }}>Subj</span>
+            <input
+              value={subject} onChange={(e) => setSubject(e.target.value)}
+              placeholder="Subject"
+              style={{
+                flex:1, background:"var(--bg-input)", border:"1px solid var(--border)",
+                borderRadius:4, padding:"5px 8px", fontSize:12,
+                color:"var(--text-primary)", fontFamily:"inherit", outline:"none",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex:1, padding:"0 16px 12px", minHeight:0 }}>
+          <textarea
+            value={body} onChange={(e) => setBody(e.target.value)}
+            placeholder="Write your message..."
+            style={{
+              width:"100%", minHeight:200, maxHeight:400, resize:"vertical",
+              background:"var(--bg-input)", border:"1px solid var(--border)",
+              borderRadius:4, padding:"8px 10px", fontSize:12, lineHeight:1.6,
+              color:"var(--text-primary)", fontFamily:"inherit", outline:"none",
+            }}
+          />
+        </div>
+
+        {/* Actions */}
+        <div style={{
+          display:"flex", gap:8, padding:"10px 16px",
+          borderTop:"1px solid var(--border)", flexShrink:0,
+        }}>
+          <button style={{
+            border:"none", borderRadius:5, padding:"7px 20px", fontSize:12, fontWeight:600,
+            cursor:"pointer", background:"#4f9cf9", color:"#fff", fontFamily:"inherit",
+          }}>Send</button>
+          <button onClick={onClose} style={{
+            border:"1px solid var(--border)", borderRadius:5, padding:"7px 16px", fontSize:12,
+            cursor:"pointer", background:"transparent", color:"var(--text-secondary)", fontFamily:"inherit",
+          }}>Discard</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [themeName,       setThemeName]       = useState("dark");
@@ -298,6 +465,22 @@ export default function App() {
   const [calendarState,   setCalendarState]   = useState(
     Object.fromEntries(CALENDARS.map(c => [`${c.accountId}::${c.id}`, c.enabled]))
   );
+
+  // ── Phase 5: Search ──
+  const [searchQuery,     setSearchQuery]     = useState("");
+  const [searchInput,     setSearchInput]     = useState(""); // live input value
+
+  // ── Phase 5: Mail filters ──
+  const [mailFilter,      setMailFilter]      = useState({ unread: false, starred: false });
+
+  // ── Phase 5: Read state ──
+  const [autoMarkRead,    setAutoMarkRead]    = useState(false);
+  const [readOverrides,   setReadOverrides]   = useState({}); // { emailId: boolean } for manual read/unread toggles
+  const [showReadSettings, setShowReadSettings] = useState(false);
+
+  // ── Phase 5: Compose ──
+  const [showCompose,     setShowCompose]     = useState(false);
+  const [composeContext,  setComposeContext]  = useState(null); // null | { mode: "new"|"reply"|"forward", email? }
 
   const theme   = THEMES[themeName];
   const isLight = themeName === "light";
@@ -311,10 +494,64 @@ export default function App() {
     });
   };
 
-  const filteredEmails = EMAILS.filter(e => activeAccounts.has(e.account));
+  const toggleFilter = (key) => {
+    setMailFilter(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const isEmailUnread = (email) => {
+    if (readOverrides[email.id] !== undefined) return readOverrides[email.id];
+    return email.unread;
+  };
+
+  const toggleReadState = (email) => {
+    const currentlyUnread = isEmailUnread(email);
+    setReadOverrides(prev => ({ ...prev, [email.id]: !currentlyUnread }));
+  };
+
+  // ── Filtered + searched emails ──
+  const accountFilteredEmails = EMAILS.filter(e => activeAccounts.has(e.account));
+
+  const displayEmails = useMemo(() => {
+    let list = accountFilteredEmails;
+
+    // Apply search
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(e =>
+        e.from.toLowerCase().includes(q) ||
+        e.subject.toLowerCase().includes(q) ||
+        e.snippet.toLowerCase().includes(q)
+      );
+    }
+
+    // Apply filters
+    if (mailFilter.unread)  list = list.filter(e => isEmailUnread(e));
+    if (mailFilter.starred) list = list.filter(e => e.starred);
+
+    return list;
+  }, [accountFilteredEmails, searchQuery, mailFilter, readOverrides]);
+
+  const totalCount   = accountFilteredEmails.length;
+  const unreadCount  = accountFilteredEmails.filter(e => isEmailUnread(e)).length;
+  const isFiltered   = searchQuery || mailFilter.unread || mailFilter.starred;
+  const acct         = (id) => ACCOUNTS.find(a => a.id === id);
+
   const filteredEvents = EVENTS.filter(e => activeAccounts.has(e.account));
-  const unreadCount    = filteredEmails.filter(e => e.unread).length;
-  const acct           = (id) => ACCOUNTS.find(a => a.id === id);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setSearchQuery(searchInput);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    setSearchInput("");
+  };
+
+  const openCompose = (mode, email = null) => {
+    setComposeContext(email ? { mode, email } : { mode });
+    setShowCompose(true);
+  };
 
   return (
     <div style={{ display:"flex", height:"100vh", width:"100%", fontFamily:"'IBM Plex Sans',sans-serif", overflow:"hidden", ...theme.vars }}>
@@ -331,6 +568,7 @@ export default function App() {
         .theme-btn         { transition:all 0.12s; cursor:pointer; }
         .theme-btn:hover   { opacity:0.75; }
         .mini-cal-day:hover { background:var(--bg-hover) !important; }
+        .filter-chip:hover  { opacity:0.85; }
       `}</style>
 
       {/* ══════════════════════════════════════════
@@ -353,7 +591,7 @@ export default function App() {
           flexShrink:0,
         }}>
           <div style={{ fontSize:17, color:"#4f9cf9", lineHeight:1, flexShrink:0 }}>⬡</div>
-          <span style={{ fontSize:13, fontWeight:600, letterSpacing:"0.03em", flex:1, color:"var(--text-primary)" }}>Unify</span>
+          <span style={{ fontSize:13, fontWeight:600, letterSpacing:"0.03em", flex:1, color:"var(--text-primary)" }}>Mogly</span>
           <div style={{ display:"flex", gap:3 }}>
             {Object.entries(THEMES).map(([key, t]) => (
               <button key={key} className="theme-btn"
@@ -445,13 +683,13 @@ export default function App() {
                 <div style={{ fontSize:9, color:"var(--text-muted)", letterSpacing:"0.12em", textTransform:"uppercase", padding:"0 14px 6px" }}>Labels</div>
                 {MAIL_LABELS.map(([label, icon]) => (
                   <div key={label} className="nav-item"
-                    onClick={() => setSelectedLabel(label)}
+                    onClick={() => { setSelectedLabel(label); clearSearch(); }}
                     style={{
                       display:"flex", alignItems:"center", gap:8,
                       padding:"5px 14px", fontSize:12, borderRadius:5,
                       margin:"1px 6px", cursor:"pointer",
-                      background: selectedLabel === label ? "var(--bg-selected)" : "transparent",
-                      color:      selectedLabel === label ? "var(--text-primary)" : "var(--text-secondary)",
+                      background: selectedLabel === label && !searchQuery ? "var(--bg-selected)" : "transparent",
+                      color:      selectedLabel === label && !searchQuery ? "var(--text-primary)" : "var(--text-secondary)",
                     }}
                   >
                     <span style={{ fontSize:10, width:14, textAlign:"center", flexShrink:0 }}>{icon}</span>
@@ -466,12 +704,14 @@ export default function App() {
                 ))}
               </div>
               <div style={{ marginTop:"auto", padding:"12px 14px" }}>
-                <button style={{
-                  width:"100%", padding:"8px", background:"#4f9cf9", color:"#fff",
-                  border:"none", borderRadius:6, fontSize:12, fontWeight:600,
-                  cursor:"pointer", display:"flex", alignItems:"center",
-                  justifyContent:"center", gap:6, fontFamily:"inherit",
-                }}>✏ Compose</button>
+                <button
+                  onClick={() => openCompose("new")}
+                  style={{
+                    width:"100%", padding:"8px", background:"#4f9cf9", color:"#fff",
+                    border:"none", borderRadius:6, fontSize:12, fontWeight:600,
+                    cursor:"pointer", display:"flex", alignItems:"center",
+                    justifyContent:"center", gap:6, fontFamily:"inherit",
+                  }}>✏ Compose</button>
               </div>
             </>
           ) : (
@@ -482,20 +722,17 @@ export default function App() {
               </div>
               <div style={{ padding:"10px 0" }}>
                 <div style={{ fontSize:9, color:"var(--text-muted)", letterSpacing:"0.12em", textTransform:"uppercase", padding:"0 14px 6px" }}>View</div>
-                {CAL_VIEWS.map(v => (
+                {["Week"].map(v => (
                   <div key={v} className="nav-item"
-                    onClick={() => setCalView(v)}
                     style={{
                       display:"flex", alignItems:"center", gap:8,
                       padding:"5px 14px", fontSize:12, borderRadius:5,
                       margin:"1px 6px", cursor:"pointer",
-                      background: calView === v ? "var(--bg-selected)" : "transparent",
-                      color:      calView === v ? "var(--text-primary)" : "var(--text-secondary)",
+                      background: "var(--bg-selected)",
+                      color: "var(--text-primary)",
                     }}
                   >
-                    <span style={{ fontSize:10, width:14, textAlign:"center" }}>
-                      {v === "Day" ? "▣" : v === "Week" ? "▦" : "⊞"}
-                    </span>
+                    <span style={{ fontSize:10, width:14, textAlign:"center" }}>▦</span>
                     {v}
                   </div>
                 ))}
@@ -520,23 +757,37 @@ export default function App() {
 
         {/* ── Topbar — mode-specific ── */}
         {activeView === "mail" ? (
-          // MAIL topbar: search
+          // MAIL topbar: functional search bar + avatars
           <div style={{
             height:46, borderBottom:"1px solid var(--border)",
             display:"flex", alignItems:"center", padding:"0 14px", gap:10, flexShrink:0,
           }}>
-            <div style={{
+            <form onSubmit={handleSearchSubmit} style={{
               flex:1, background:"var(--bg-input)", border:"1px solid var(--border)",
               borderRadius:6, padding:"5px 11px", display:"flex", alignItems:"center", gap:8,
             }}>
               <span style={{ color:"var(--text-muted)", fontSize:13 }}>⌕</span>
-              <span style={{ color:"var(--text-faint)", fontSize:12 }}>Search mail across all accounts...</span>
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search mail across all accounts..."
+                style={{
+                  flex:1, background:"transparent", border:"none", outline:"none",
+                  color:"var(--text-primary)", fontSize:12, fontFamily:"inherit",
+                }}
+              />
+              {searchQuery && (
+                <button type="button" onClick={clearSearch} style={{
+                  background:"none", border:"none", color:"var(--text-muted)",
+                  fontSize:12, cursor:"pointer", padding:"0 2px", fontFamily:"inherit",
+                }}>✕</button>
+              )}
               <span style={{
-                marginLeft:"auto", background:"var(--bg-btn)",
+                background:"var(--bg-btn)",
                 color:"var(--text-muted)", fontSize:9, padding:"2px 5px",
                 borderRadius:3, fontFamily:"'IBM Plex Mono',monospace",
               }}>⌘K</span>
-            </div>
+            </form>
             <div style={{ display:"flex", gap:3 }}>
               {[...activeAccounts].map(id => (
                 <div key={id} style={{
@@ -587,58 +838,133 @@ export default function App() {
 
             {/* Email list */}
             <div style={{ width:296, borderRight:"1px solid var(--border)", overflowY:"auto", flexShrink:0 }}>
+              {/* Header with count + filter chips */}
               <div style={{
                 padding:"8px 12px", borderBottom:"1px solid var(--border)",
-                display:"flex", alignItems:"center", justifyContent:"space-between",
               }}>
-                <span style={{ color:"var(--text-muted)", fontSize:11 }}>{filteredEmails.length} threads · {selectedLabel}</span>
-                <div style={{ display:"flex", gap:10 }}>
-                  {["Filter ▾","Sort ▾"].map(s => (
-                    <span key={s} style={{ color:"var(--text-muted)", fontSize:11, cursor:"pointer" }}>{s}</span>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: (mailFilter.unread || mailFilter.starred) ? 6 : 0 }}>
+                  <span style={{ color:"var(--text-muted)", fontSize:11 }}>
+                    {isFiltered
+                      ? `${displayEmails.length} of ${totalCount} threads`
+                      : `${totalCount} threads`}
+                    {searchQuery ? ` · "${searchQuery}"` : ` · ${selectedLabel}`}
+                  </span>
+                </div>
+                {/* Filter chips */}
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                  {[
+                    { key: "unread",  label: "Unread",  icon: "●" },
+                    { key: "starred", label: "Starred", icon: "★" },
+                  ].map(({ key, label, icon }) => (
+                    <button key={key}
+                      className="filter-chip"
+                      onClick={() => toggleFilter(key)}
+                      style={{
+                        display:"flex", alignItems:"center", gap:4,
+                        padding:"3px 8px", borderRadius:12, fontSize:10,
+                        fontFamily:"inherit", cursor:"pointer",
+                        border: mailFilter[key] ? "1px solid #4f9cf9" : "1px solid var(--border)",
+                        background: mailFilter[key] ? "#4f9cf922" : "transparent",
+                        color: mailFilter[key] ? "#4f9cf9" : "var(--text-muted)",
+                        transition:"all 0.12s",
+                      }}
+                    >
+                      <span style={{ fontSize:7 }}>{icon}</span>
+                      {label}
+                    </button>
                   ))}
                 </div>
               </div>
-              {filteredEmails.map(email => (
-                <div key={email.id} className="hover-row"
-                  onClick={() => setSelectedEmail(email)}
-                  style={{
-                    display:"flex", alignItems:"stretch",
-                    padding:"9px 12px 9px 0",
-                    borderBottom:"1px solid var(--border-light)",
-                    background: selectedEmail?.id === email.id ? "var(--bg-selected)" : "transparent",
-                    borderLeft: selectedEmail?.id === email.id
-                      ? `2.5px solid ${acct(email.account).color}`
-                      : `2.5px solid ${acct(email.account).color}44`,
-                    transition:"background 0.1s",
-                  }}
-                >
-                  <div style={{ flex:1, minWidth:0, paddingLeft:9 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:2 }}>
-                      <span style={{
-                        fontSize:12,
-                        color: email.unread ? "var(--text-primary)" : "var(--text-secondary)",
-                        fontWeight: email.unread ? 500 : 400,
-                      }}>{email.from}</span>
-                      {email.starred && <span style={{ color:"#f97316", fontSize:9 }}>★</span>}
-                    </div>
-                    <div style={{ fontSize:11, color:"var(--text-secondary)", marginBottom:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{email.subject}</div>
-                    <div style={{ fontSize:10, color:"var(--text-muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{email.snippet}</div>
-                  </div>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0, paddingTop:1 }}>
-                    <div style={{ color: email.unread ? "var(--text-primary)" : "var(--text-muted)", fontSize:10 }}>{email.time}</div>
-                    {email.unread && <div style={{ width:5, height:5, borderRadius:"50%", background:"#4f9cf9" }} />}
-                  </div>
+
+              {/* Email rows */}
+              {displayEmails.length === 0 ? (
+                <div style={{
+                  padding:"32px 12px", textAlign:"center",
+                  color:"var(--text-muted)", fontSize:12,
+                }}>
+                  {searchQuery ? "No results found" : "No messages match filters"}
                 </div>
-              ))}
+              ) : (
+                displayEmails.map(email => {
+                  const emailUnread = isEmailUnread(email);
+                  return (
+                    <div key={email.id} className="hover-row"
+                      onClick={() => setSelectedEmail(email)}
+                      style={{
+                        display:"flex", alignItems:"stretch",
+                        padding:"9px 12px 9px 0",
+                        borderBottom:"1px solid var(--border-light)",
+                        background: selectedEmail?.id === email.id ? "var(--bg-selected)" : "transparent",
+                        borderLeft: selectedEmail?.id === email.id
+                          ? `2.5px solid ${acct(email.account).color}`
+                          : `2.5px solid ${acct(email.account).color}44`,
+                        transition:"background 0.1s",
+                      }}
+                    >
+                      <div style={{ flex:1, minWidth:0, paddingLeft:9 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:2 }}>
+                          <span style={{
+                            fontSize:12,
+                            color: emailUnread ? "var(--text-primary)" : "var(--text-secondary)",
+                            fontWeight: emailUnread ? 500 : 400,
+                          }}>{email.from}</span>
+                          {email.starred && <span style={{ color:"#f97316", fontSize:9 }}>★</span>}
+                        </div>
+                        <div style={{ fontSize:11, color:"var(--text-secondary)", marginBottom:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{email.subject}</div>
+                        <div style={{ fontSize:10, color:"var(--text-muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{email.snippet}</div>
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0, paddingTop:1 }}>
+                        <div style={{ color: emailUnread ? "var(--text-primary)" : "var(--text-muted)", fontSize:10 }}>{email.time}</div>
+                        {emailUnread && <div style={{ width:5, height:5, borderRadius:"50%", background:"#4f9cf9" }} />}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Detail pane */}
             <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0, background:"var(--bg-panel)" }}>
               {selectedEmail ? (
                 <>
+                  {/* Header with subject + read settings gear */}
                   <div style={{ padding:"18px 22px 14px", borderBottom:"1px solid var(--border)" }}>
-                    <div style={{ fontSize:15, color:"var(--text-primary)", fontWeight:500, marginBottom:12, lineHeight:1.4 }}>
-                      {selectedEmail.subject}
+                    <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
+                      <div style={{ fontSize:15, color:"var(--text-primary)", fontWeight:500, marginBottom:12, lineHeight:1.4, flex:1 }}>
+                        {selectedEmail.subject}
+                      </div>
+                      {/* Read settings gear */}
+                      <div style={{ position:"relative" }}>
+                        <button
+                          onClick={() => setShowReadSettings(prev => !prev)}
+                          title="Read settings"
+                          style={{
+                            background:"none", border:"none", color:"var(--text-muted)",
+                            fontSize:14, cursor:"pointer", padding:"2px 4px", fontFamily:"inherit",
+                          }}
+                        >⚙</button>
+                        {showReadSettings && (
+                          <div style={{
+                            position:"absolute", right:0, top:24, zIndex:100,
+                            background:"var(--bg-panel)", border:"1px solid var(--border)",
+                            borderRadius:6, padding:"10px 14px", minWidth:180,
+                            boxShadow:"0 4px 12px rgba(0,0,0,0.2)",
+                          }}>
+                            <label style={{
+                              display:"flex", alignItems:"center", gap:8,
+                              fontSize:11, color:"var(--text-secondary)", cursor:"pointer",
+                              whiteSpace:"nowrap",
+                            }}>
+                              <input
+                                type="checkbox" checked={autoMarkRead}
+                                onChange={(e) => setAutoMarkRead(e.target.checked)}
+                                style={{ accentColor:"#4f9cf9" }}
+                              />
+                              Auto-mark read when viewed
+                            </label>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                       <div style={{
@@ -671,15 +997,28 @@ export default function App() {
                       Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
                     </p>
                   </div>
-                  <div style={{ padding:"10px 22px", borderTop:"1px solid var(--border)", display:"flex", gap:8 }}>
-                    <button style={{
-                      border:"none", borderRadius:5, padding:"7px 16px", fontSize:12, fontWeight:600,
-                      cursor:"pointer", background:acct(selectedEmail.account).color, color:"#fff", fontFamily:"inherit",
-                    }}>↩ Reply</button>
-                    <button style={{
-                      border:"1px solid var(--border)", borderRadius:5, padding:"7px 16px", fontSize:12,
-                      cursor:"pointer", background:"transparent", color:"var(--text-secondary)", fontFamily:"inherit",
-                    }}>↪ Forward</button>
+                  {/* Action bar with Reply, Forward, Mark read/unread, Archive */}
+                  <div style={{ padding:"10px 22px", borderTop:"1px solid var(--border)", display:"flex", gap:8, alignItems:"center" }}>
+                    <button
+                      onClick={() => openCompose("reply", selectedEmail)}
+                      style={{
+                        border:"none", borderRadius:5, padding:"7px 16px", fontSize:12, fontWeight:600,
+                        cursor:"pointer", background:acct(selectedEmail.account).color, color:"#fff", fontFamily:"inherit",
+                      }}>↩ Reply</button>
+                    <button
+                      onClick={() => openCompose("forward", selectedEmail)}
+                      style={{
+                        border:"1px solid var(--border)", borderRadius:5, padding:"7px 16px", fontSize:12,
+                        cursor:"pointer", background:"transparent", color:"var(--text-secondary)", fontFamily:"inherit",
+                      }}>↪ Forward</button>
+                    <button
+                      onClick={() => toggleReadState(selectedEmail)}
+                      style={{
+                        border:"1px solid var(--border)", borderRadius:5, padding:"7px 16px", fontSize:12,
+                        cursor:"pointer", background:"transparent", color:"var(--text-secondary)", fontFamily:"inherit",
+                      }}>
+                      {isEmailUnread(selectedEmail) ? "◉ Mark read" : "○ Mark unread"}
+                    </button>
                     <button style={{
                       border:"1px solid var(--border)", borderRadius:5, padding:"7px 16px", fontSize:12,
                       cursor:"pointer", background:"transparent", color:"var(--text-secondary)",
@@ -782,6 +1121,19 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* ══════════════════════════════════════════
+          COMPOSE MODAL OVERLAY
+      ══════════════════════════════════════════ */}
+      {showCompose && (
+        <ComposeModal
+          context={composeContext}
+          accounts={ACCOUNTS}
+          activeAccounts={activeAccounts}
+          onClose={() => { setShowCompose(false); setComposeContext(null); }}
+          isLight={isLight}
+        />
+      )}
     </div>
   );
 }
