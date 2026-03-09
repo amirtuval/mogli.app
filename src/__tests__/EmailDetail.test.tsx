@@ -62,6 +62,7 @@ describe('EmailDetail', () => {
     useUIStore.setState({
       selectedThreadId: 't1',
       theme: 'dark',
+      autoMarkRead: false,
     })
   })
 
@@ -153,5 +154,93 @@ describe('EmailDetail', () => {
     await waitFor(() => {
       expect(useUIStore.getState().selectedThreadId).toBeNull()
     })
+  })
+
+  it('should show "Mark unread" for a read message and call mark_unread on click', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD).mockResolvedValueOnce(undefined)
+
+    renderWithQuery(
+      <EmailDetail
+        accounts={MOCK_ACCOUNTS}
+        selectedMessage={{ ...MOCK_SELECTED_MESSAGE, unread: false }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('○ Mark unread')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('○ Mark unread'))
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('mark_unread', {
+        accountId: 'a1',
+        threadId: 't1',
+      })
+    })
+  })
+
+  it('should show "Mark read" for an unread message and call mark_read on click', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD).mockResolvedValueOnce(undefined)
+
+    renderWithQuery(
+      <EmailDetail
+        accounts={MOCK_ACCOUNTS}
+        selectedMessage={{ ...MOCK_SELECTED_MESSAGE, unread: true }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Mark read')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('✓ Mark read'))
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('mark_read', {
+        accountId: 'a1',
+        threadId: 't1',
+      })
+    })
+  })
+
+  it('should render auto-mark-read checkbox reflecting store state', async () => {
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD)
+    useUIStore.setState({ autoMarkRead: true })
+
+    renderWithQuery(
+      <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Auto-read')).toBeInTheDocument()
+    })
+
+    const checkbox = screen.getByRole('checkbox')
+    expect(checkbox).toBeChecked()
+  })
+
+  it('should toggle auto-mark-read in store when checkbox is clicked', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD)
+    // save_auto_mark_read invoke
+    mockedInvoke.mockResolvedValueOnce(undefined)
+
+    renderWithQuery(
+      <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Auto-read')).toBeInTheDocument()
+    })
+
+    const checkbox = screen.getByRole('checkbox')
+    expect(checkbox).not.toBeChecked()
+
+    await user.click(checkbox)
+
+    expect(useUIStore.getState().autoMarkRead).toBe(true)
   })
 })

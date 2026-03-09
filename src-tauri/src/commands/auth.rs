@@ -84,3 +84,17 @@ pub async fn load_week_start_day(app: AppHandle) -> Result<u8, String> {
 pub async fn save_week_start_day(app: AppHandle, day: u8) -> Result<(), String> {
     store::save_week_start_day(&app, day)
 }
+
+/// Load the persisted auto-mark-read preference. Returns `false` if not set.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_auto_mark_read(app: AppHandle) -> Result<bool, String> {
+    Ok(store::load_auto_mark_read(&app)?.unwrap_or(false))
+}
+
+/// Persist the auto-mark-read preference to disk.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_auto_mark_read(app: AppHandle, enabled: bool) -> Result<(), String> {
+    store::save_auto_mark_read(&app, enabled)
+}

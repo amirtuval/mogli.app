@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -16,12 +16,51 @@ interface EmailDetailProps {
 export default function EmailDetail({ accounts, selectedMessage }: EmailDetailProps) {
   const selectedThreadId = useUIStore((s) => s.selectedThreadId)
   const theme = useUIStore((s) => s.theme)
+  const autoMarkRead = useUIStore((s) => s.autoMarkRead)
+  const setAutoMarkRead = useUIStore((s) => s.setAutoMarkRead)
   const queryClient = useQueryClient()
 
   const accountId = selectedMessage?.account_id ?? null
   const { data: thread, isLoading } = useThread(accountId, selectedThreadId)
 
   const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
+
+  // Auto-mark-read: mark thread as read after 2s if autoMarkRead is on
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
+    if (!autoMarkRead || !selectedMessage?.unread || !accountId || !selectedThreadId) return
+
+    timerRef.current = setTimeout(() => {
+      invoke('mark_read', { accountId, threadId: selectedThreadId }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['messages'] })
+        queryClient.invalidateQueries({ queryKey: ['search'] })
+      })
+    }, 2000)
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [autoMarkRead, selectedMessage?.unread, accountId, selectedThreadId, queryClient])
+
+  const handleMarkReadUnread = async () => {
+    if (!accountId || !selectedThreadId || !selectedMessage) return
+    const command = selectedMessage.unread ? 'mark_read' : 'mark_unread'
+    try {
+      await invoke(command, { accountId, threadId: selectedThreadId })
+      queryClient.invalidateQueries({ queryKey: ['messages'] })
+      queryClient.invalidateQueries({ queryKey: ['search'] })
+    } catch (e) {
+      console.error(`${command} failed:`, e)
+    }
+  }
 
   const handleArchive = async () => {
     if (!accountId || !selectedThreadId) return
@@ -35,11 +74,11 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
   }
 
   const handleReply = () => {
-    console.warn('Reply not yet implemented — Phase 2 stub')
+    console.warn('Reply not yet implemented — Phase 5 compose')
   }
 
   const handleForward = () => {
-    console.warn('Forward not yet implemented — Phase 2 stub')
+    console.warn('Forward not yet implemented — Phase 5 compose')
   }
 
   if (!selectedThreadId) {
@@ -82,7 +121,17 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
   return (
     <div className={styles.container}>
       <div className={styles.headerSection}>
-        <div className={styles.subject}>{message.subject}</div>
+        <div className={styles.subjectRow}>
+          <div className={styles.subject}>{message.subject}</div>
+          <label className={styles.autoMarkReadToggle}>
+            <input
+              type="checkbox"
+              checked={autoMarkRead}
+              onChange={(e) => setAutoMarkRead(e.target.checked)}
+            />
+            <span className={styles.autoMarkReadLabel}>Auto-read</span>
+          </label>
+        </div>
         <div className={styles.senderRow}>
           <div className={styles.senderAvatar} style={{ background: acctColor }}>
             {message.from[0]?.toUpperCase() ?? '?'}
@@ -124,6 +173,9 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
         </button>
         <button className={styles.forwardBtn} onClick={handleForward}>
           ↪ Forward
+        </button>
+        <button className={styles.readToggleBtn} onClick={handleMarkReadUnread}>
+          {selectedMessage?.unread ? '✓ Mark read' : '○ Mark unread'}
         </button>
         <button className={styles.archiveBtn} onClick={handleArchive}>
           Archive

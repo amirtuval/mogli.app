@@ -39,6 +39,7 @@ interface UIState {
   notificationsEnabled: boolean // OS notification permission granted
   searchQuery: string // active mail search query (empty = no search)
   mailFilter: { unread: boolean; starred: boolean } // client-side filter chips
+  autoMarkRead: boolean // auto-mark threads as read after 2s delay
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -53,6 +54,7 @@ interface UIState {
   setNotificationsEnabled: (enabled: boolean) => void
   setSearchQuery: (query: string) => void
   toggleMailFilter: (key: 'unread' | 'starred') => void
+  setAutoMarkRead: (enabled: boolean) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -66,6 +68,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   notificationsEnabled: false,
   searchQuery: '',
   mailFilter: { unread: false, starred: false },
+  autoMarkRead: false,
 
   setTheme: (theme) => {
     set({ theme })
@@ -109,6 +112,12 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((state) => ({
       mailFilter: { ...state.mailFilter, [key]: !state.mailFilter[key] },
     })),
+  setAutoMarkRead: (enabled) => {
+    set({ autoMarkRead: enabled })
+    invoke('save_auto_mark_read', { enabled }).catch((e: unknown) =>
+      console.warn('Failed to persist auto-mark-read:', e),
+    )
+  },
 }))
 
 /** Load the persisted theme from the backend store and apply it. */
@@ -142,5 +151,15 @@ export async function initNotifications(): Promise<void> {
     useUIStore.getState().setNotificationsEnabled(granted)
   } catch {
     // Plugin unavailable — keep default (false)
+  }
+}
+
+/** Load the persisted auto-mark-read preference from the backend store. */
+export async function initAutoMarkRead(): Promise<void> {
+  try {
+    const saved = await invoke<boolean>('load_auto_mark_read')
+    useUIStore.setState({ autoMarkRead: saved })
+  } catch {
+    // First launch or store unavailable — keep default (false)
   }
 }

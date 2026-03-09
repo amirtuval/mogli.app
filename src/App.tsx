@@ -3,7 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { Account } from './types/models'
-import { useUIStore, initTheme, initWeekStartDay, initNotifications } from './store/uiStore'
+import {
+  useUIStore,
+  initTheme,
+  initWeekStartDay,
+  initNotifications,
+  initAutoMarkRead,
+} from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
 import { useMessages } from './hooks/useMessages'
@@ -181,6 +187,7 @@ function App() {
     initTheme()
     initWeekStartDay()
     initNotifications()
+    initAutoMarkRead()
   }, [])
 
   return (

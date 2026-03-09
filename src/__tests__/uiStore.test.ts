@@ -15,6 +15,7 @@ describe('uiStore', () => {
       notificationsEnabled: false,
       searchQuery: '',
       mailFilter: { unread: false, starred: false },
+      autoMarkRead: false,
     })
   })
 
@@ -172,6 +173,21 @@ describe('uiStore', () => {
     useUIStore.getState().toggleMailFilter('starred')
     expect(useUIStore.getState().mailFilter.starred).toBe(true)
     expect(useUIStore.getState().mailFilter.unread).toBe(false)
+  })
+
+  it('should initialize autoMarkRead as false', () => {
+    expect(useUIStore.getState().autoMarkRead).toBe(false)
+  })
+
+  it('should set autoMarkRead to true', () => {
+    useUIStore.getState().setAutoMarkRead(true)
+    expect(useUIStore.getState().autoMarkRead).toBe(true)
+  })
+
+  it('should set autoMarkRead back to false', () => {
+    useUIStore.setState({ autoMarkRead: true })
+    useUIStore.getState().setAutoMarkRead(false)
+    expect(useUIStore.getState().autoMarkRead).toBe(false)
   })
 })
 
