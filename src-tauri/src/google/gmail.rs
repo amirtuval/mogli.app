@@ -554,6 +554,71 @@ pub async fn mark_unread(
     modify_thread_labels(creds, email, thread_id, &["UNREAD"], &[]).await
 }
 
+/// Build an RFC 2822 message string from components.
+pub fn build_rfc2822(
+    from: &str,
+    to: &[String],
+    cc: &[String],
+    subject: &str,
+    body: &str,
+    in_reply_to: Option<&str>,
+    references: Option<&str>,
+) -> String {
+    let mut msg = String::new();
+    let _ = write!(msg, "From: {from}\r\n");
+    let _ = write!(msg, "To: {}\r\n", to.join(", "));
+    if !cc.is_empty() {
+        let _ = write!(msg, "Cc: {}\r\n", cc.join(", "));
+    }
+    let _ = write!(msg, "Subject: {subject}\r\n");
+    if let Some(irt) = in_reply_to {
+        let _ = write!(msg, "In-Reply-To: {irt}\r\n");
+    }
+    if let Some(refs) = references {
+        let _ = write!(msg, "References: {refs}\r\n");
+    }
+    let _ = write!(msg, "Content-Type: text/plain; charset=utf-8\r\n");
+    let _ = write!(msg, "\r\n{body}");
+    msg
+}
+
+/// Send an email via the Gmail API.
+#[allow(clippy::too_many_arguments)]
+pub async fn send_message(
+    creds: &OAuthCredentials,
+    email: &str,
+    to: &[String],
+    cc: &[String],
+    subject: &str,
+    body: &str,
+    in_reply_to: Option<&str>,
+    references: Option<&str>,
+) -> Result<(), String> {
+    let raw = build_rfc2822(email, to, cc, subject, body, in_reply_to, references);
+    let encoded = URL_SAFE_NO_PAD.encode(raw.as_bytes());
+
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!("{GMAIL_BASE_URL}/users/me/messages/send");
+    let send_body = serde_json::json!({ "raw": encoded });
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&send_body)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail send request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail send failed: {body}"));
+    }
+
+    Ok(())
+}
+
 // --- Incremental sync via history.list ---
 
 #[derive(Debug, Deserialize)]
@@ -891,5 +956,67 @@ mod tests {
         assert_eq!(atts[0].filename, "document.pdf");
         assert_eq!(atts[0].mime_type, "application/pdf");
         assert_eq!(atts[0].size, 12345);
+    }
+
+    #[test]
+    fn test_build_rfc2822_basic() {
+        let raw = build_rfc2822(
+            "me@example.com",
+            &["alice@example.com".to_string()],
+            &[],
+            "Hello",
+            "Hi Alice",
+            None,
+            None,
+        );
+        assert!(raw.contains("From: me@example.com\r\n"));
+        assert!(raw.contains("To: alice@example.com\r\n"));
+        assert!(raw.contains("Subject: Hello\r\n"));
+        assert!(raw.contains("Content-Type: text/plain; charset=utf-8\r\n"));
+        assert!(raw.contains("\r\nHi Alice"));
+        assert!(!raw.contains("Cc:"));
+        assert!(!raw.contains("In-Reply-To:"));
+        assert!(!raw.contains("References:"));
+    }
+
+    #[test]
+    fn test_build_rfc2822_with_cc_and_reply_headers() {
+        let raw = build_rfc2822(
+            "me@example.com",
+            &["alice@example.com".to_string()],
+            &[
+                "bob@example.com".to_string(),
+                "charlie@example.com".to_string(),
+            ],
+            "Re: Hello",
+            "Thanks!",
+            Some("<msg-id-123@mail.gmail.com>"),
+            Some("<msg-id-123@mail.gmail.com>"),
+        );
+        assert!(raw.contains("Cc: bob@example.com, charlie@example.com\r\n"));
+        assert!(raw.contains("In-Reply-To: <msg-id-123@mail.gmail.com>\r\n"));
+        assert!(raw.contains("References: <msg-id-123@mail.gmail.com>\r\n"));
+        assert!(raw.contains("Subject: Re: Hello\r\n"));
+    }
+
+    #[test]
+    fn test_rfc2822_base64url_encoding() {
+        let raw = build_rfc2822(
+            "me@example.com",
+            &["alice@example.com".to_string()],
+            &[],
+            "Test",
+            "Body",
+            None,
+            None,
+        );
+        let encoded = URL_SAFE_NO_PAD.encode(raw.as_bytes());
+        // Should be valid base64url (no +, /, or = characters)
+        assert!(!encoded.contains('+'));
+        assert!(!encoded.contains('/'));
+        assert!(!encoded.contains('='));
+        // Should decode back to original
+        let decoded = URL_SAFE_NO_PAD.decode(&encoded).unwrap();
+        assert_eq!(String::from_utf8(decoded).unwrap(), raw);
     }
 }

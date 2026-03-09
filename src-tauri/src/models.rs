@@ -80,6 +80,18 @@ pub struct Attachment {
     pub size: u64,
 }
 
+/// Request payload for sending a new email.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct SendMessageRequest {
+    pub account_id: String,
+    pub to: Vec<String>,
+    pub cc: Vec<String>,
+    pub subject: String,
+    pub body: String,
+    pub in_reply_to: Option<String>,
+    pub references: Option<String>,
+}
+
 /// Ordered list of account colors assigned on add.
 pub const ACCOUNT_COLORS: &[&str] = &[
     "#4f9cf9", // blue

@@ -50,6 +50,7 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::gmail::mark_read,
         commands::gmail::mark_unread,
         commands::gmail::search_messages,
+        commands::gmail::send_message,
         commands::calendar::list_calendars,
         commands::calendar::set_calendar_enabled,
         commands::calendar::get_account_events,

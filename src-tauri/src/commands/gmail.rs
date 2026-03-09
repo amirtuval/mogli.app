@@ -2,7 +2,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::google::gmail as gmail_api;
 use crate::google::oauth::OAuthCredentials;
-use crate::models::{MessageMeta, Thread};
+use crate::models::{MessageMeta, SendMessageRequest, Thread};
 use crate::store::AccountStore;
 
 /// Fetch messages for a single account and label.
@@ -198,4 +198,23 @@ pub async fn search_messages(
 
     all_messages.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(all_messages)
+}
+
+/// Send an email from the specified account.
+#[tauri::command]
+#[specta::specta]
+pub async fn send_message(app: AppHandle, request: SendMessageRequest) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = get_account_email(&app, &request.account_id)?;
+    gmail_api::send_message(
+        &creds,
+        &email,
+        &request.to,
+        &request.cc,
+        &request.subject,
+        &request.body,
+        request.in_reply_to.as_deref(),
+        request.references.as_deref(),
+    )
+    .await
 }
