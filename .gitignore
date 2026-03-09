@@ -30,3 +30,6 @@ screenshots/
 
 # Ephemeral docs
 ephemeral-docs/
+
+# Worktrees
+.worktrees/

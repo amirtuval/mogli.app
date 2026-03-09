@@ -2,7 +2,7 @@
 
 ## What is this project?
 
-Mogly is a cross-platform desktop app (Tauri v2 + React/TypeScript) providing a unified inbox and calendar for multiple Google accounts. Currently in **Phase 3: Calendar View** (Phases 1–2 complete).
+Mogly is a cross-platform desktop app (Tauri v2 + React/TypeScript) providing a unified inbox and calendar for multiple Google accounts. Phases 1–4 complete (Infrastructure, Mail UI, Calendar View, Notifications).
 
 The full design spec lives at `docs/mogly-design.md`.
 
@@ -125,3 +125,35 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR:
 ## Git workflow
 
 - **Never amend commits or force-push.** Always create new commits and push normally. Amending/force-pushing breaks other worktrees and machines that have already pulled the branch.
+
+## Implementation guides
+
+An implementation guide is a design and implementation plan for a feature or phase. It lives in `ephemeral-docs/` and serves as the single source of truth for the work in progress. Structure:
+
+- **Overview** — What we're building and why.
+- **Steps** — The implementation broken into incremental steps. Each step should be small enough to verify independently.
+- **Progress** — A log updated after each step is completed with results, observations, and any deviations from the plan.
+
+### Workflow
+
+1. Create the implementation guide in `ephemeral-docs/`. The guide must specify the worktree name and branch (e.g., `.worktrees/my-feature` on branch `my-feature`).
+2. Create a git worktree for the work: `git worktree add .worktrees/<name> -b <branch-name>`.
+3. **ALL implementation work happens exclusively in the worktree, never on main.** The main worktree is only for creating the guide, merging, and non-implementation tasks.
+4. Implement one step at a time in the worktree. After each step:
+   - **Rust checks:**
+     - `cargo fmt --check --manifest-path src-tauri/Cargo.toml`
+     - `cargo clippy --manifest-path src-tauri/Cargo.toml -- -W clippy::pedantic -D warnings`
+     - `cargo test --manifest-path src-tauri/Cargo.toml --all`
+   - **Frontend checks:**
+     - `npx tsc --noEmit`
+     - `yarn lint`
+     - `yarn format:check`
+     - `yarn test`
+   - If all pass: **commit and push**.
+   - Update the **Progress** section in the implementation guide.
+5. On non-main branches and worktrees, commit and push often. Don't batch changes — frequent small commits make review easier and reduce risk of lost work.
+6. As a final step, consider whether the work warrants:
+   - **Tests** — if it changes backend behavior, adds new commands, or modifies frontend logic.
+   - **UI polish** — if it adds new components or modifies existing views.
+   If so, add a step to the guide.
+7. After all steps are complete, create a PR. **Never merge the PR** — only the human reviews and merges.
