@@ -154,6 +154,19 @@ pub async fn mark_read(
     gmail_api::mark_read(&creds, &email, &thread_id).await
 }
 
+/// Mark a thread as unread.
+#[tauri::command]
+#[specta::specta]
+pub async fn mark_unread(
+    app: AppHandle,
+    account_id: String,
+    thread_id: String,
+) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = get_account_email(&app, &account_id)?;
+    gmail_api::mark_unread(&creds, &email, &thread_id).await
+}
+
 /// Search messages across the given accounts.
 #[tauri::command]
 #[specta::specta]

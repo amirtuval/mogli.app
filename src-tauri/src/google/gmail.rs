@@ -545,6 +545,15 @@ pub async fn mark_read(
     modify_thread_labels(creds, email, thread_id, &[], &["UNREAD"]).await
 }
 
+/// Mark a thread as unread (add UNREAD label).
+pub async fn mark_unread(
+    creds: &OAuthCredentials,
+    email: &str,
+    thread_id: &str,
+) -> Result<(), String> {
+    modify_thread_labels(creds, email, thread_id, &["UNREAD"], &[]).await
+}
+
 // --- Incremental sync via history.list ---
 
 #[derive(Debug, Deserialize)]
