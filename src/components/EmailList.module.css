@@ -16,6 +16,40 @@
 .headerInfo {
   color: var(--text-muted);
   font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ── Filter chips ── */
+.filterChips {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.filterChip {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.4;
+  transition:
+    background 0.1s,
+    border-color 0.1s,
+    color 0.1s;
+}
+
+.filterChip:hover {
+  background: var(--bg-hover);
+}
+
+.filterChipActive {
+  border-color: #4f9cf9;
+  background: rgba(79, 156, 249, 0.12);
+  color: #4f9cf9;
 }
 
 /* ── Email row ── */

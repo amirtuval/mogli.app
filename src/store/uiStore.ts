@@ -38,6 +38,7 @@ interface UIState {
   weekStartDay: WeekStartDay // 0 = Sunday, 1 = Monday
   notificationsEnabled: boolean // OS notification permission granted
   searchQuery: string // active mail search query (empty = no search)
+  mailFilter: { unread: boolean; starred: boolean } // client-side filter chips
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -51,6 +52,7 @@ interface UIState {
   goToToday: () => void
   setNotificationsEnabled: (enabled: boolean) => void
   setSearchQuery: (query: string) => void
+  toggleMailFilter: (key: 'unread' | 'starred') => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -63,6 +65,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   calendarWeekStart: getWeekStart(new Date(), 1),
   notificationsEnabled: false,
   searchQuery: '',
+  mailFilter: { unread: false, starred: false },
 
   setTheme: (theme) => {
     set({ theme })
@@ -102,6 +105,10 @@ export const useUIStore = create<UIState>((set, get) => ({
   goToToday: () => set({ calendarWeekStart: getWeekStart(new Date(), get().weekStartDay) }),
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  toggleMailFilter: (key) =>
+    set((state) => ({
+      mailFilter: { ...state.mailFilter, [key]: !state.mailFilter[key] },
+    })),
 }))
 
 /** Load the persisted theme from the backend store and apply it. */

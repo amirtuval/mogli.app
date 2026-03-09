@@ -14,6 +14,7 @@ describe('uiStore', () => {
       weekStartDay: 1,
       notificationsEnabled: false,
       searchQuery: '',
+      mailFilter: { unread: false, starred: false },
     })
   })
 
@@ -148,6 +149,29 @@ describe('uiStore', () => {
     useUIStore.setState({ searchQuery: 'something' })
     useUIStore.getState().setSearchQuery('')
     expect(useUIStore.getState().searchQuery).toBe('')
+  })
+
+  it('should initialize mailFilter with both false', () => {
+    const { mailFilter } = useUIStore.getState()
+    expect(mailFilter).toEqual({ unread: false, starred: false })
+  })
+
+  it('should toggle unread filter on', () => {
+    useUIStore.getState().toggleMailFilter('unread')
+    expect(useUIStore.getState().mailFilter.unread).toBe(true)
+    expect(useUIStore.getState().mailFilter.starred).toBe(false)
+  })
+
+  it('should toggle unread filter off', () => {
+    useUIStore.setState({ mailFilter: { unread: true, starred: false } })
+    useUIStore.getState().toggleMailFilter('unread')
+    expect(useUIStore.getState().mailFilter.unread).toBe(false)
+  })
+
+  it('should toggle starred filter independently', () => {
+    useUIStore.getState().toggleMailFilter('starred')
+    expect(useUIStore.getState().mailFilter.starred).toBe(true)
+    expect(useUIStore.getState().mailFilter.unread).toBe(false)
   })
 })
 
