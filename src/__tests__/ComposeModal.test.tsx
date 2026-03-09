@@ -171,12 +171,18 @@ describe('ComposeModal', () => {
     expect(useUIStore.getState().showCompose).toBe(false)
   })
 
-  it('should list all account emails in the From dropdown', () => {
+  it('should list all account emails in the From dropdown', async () => {
     useUIStore.setState({ composeContext: { mode: 'new' } })
+    const user = userEvent.setup()
 
     renderWithQuery(<ComposeModal accounts={MOCK_ACCOUNTS} />)
 
+    // The trigger shows the default selected account
     expect(screen.getByText('work@test.com')).toBeInTheDocument()
+
+    // Open the dropdown to see all accounts
+    await user.click(screen.getByText('work@test.com'))
+
     expect(screen.getByText('personal@test.com')).toBeInTheDocument()
   })
 })

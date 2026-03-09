@@ -7,6 +7,20 @@ import { useThread } from '../hooks/useThread'
 import { useUIStore } from '../store/uiStore'
 import styles from './EmailDetail.module.css'
 
+/**
+ * Strip dangerous content from email HTML:
+ * - Remove <script> blocks
+ * - Remove on* event-handler attributes (onerror, onload, etc.)
+ */
+function sanitizeHtml(html: string): string {
+  return (
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
+      .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
+  )
+}
+
 interface EmailDetailProps {
   accounts: Account[]
   /** The selected message from the list, used to find the thread's account. */
@@ -181,10 +195,14 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
         {message.body_html ? (
           <div
             className={styles.bodyHtml}
-            dangerouslySetInnerHTML={{ __html: message.body_html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.body_html) }}
           />
+        ) : message.body_text ? (
+          <div className={styles.bodyText}>{message.body_text}</div>
         ) : (
-          <div className={styles.bodyText}>{message.body_text ?? ''}</div>
+          <div className={styles.bodyText}>
+            {selectedMessage?.snippet || '(No content available)'}
+          </div>
         )}
       </div>
 

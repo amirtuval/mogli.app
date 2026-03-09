@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Account, SendMessageRequest } from '../types/models'
@@ -50,6 +50,8 @@ export default function ComposeModal({ accounts }: ComposeModalProps) {
   }, [composeContext])
 
   const [fromAccountId, setFromAccountId] = useState(defaultAccountId)
+  const [fromOpen, setFromOpen] = useState(false)
+  const fromRef = useRef<HTMLDivElement>(null)
   const [to, setTo] = useState(defaultTo)
   const [cc, setCc] = useState('')
   const [showCc, setShowCc] = useState(false)
@@ -66,6 +68,17 @@ export default function ComposeModal({ accounts }: ComposeModalProps) {
 
   const selectedAccount = accounts.find((a) => a.id === fromAccountId) ?? accounts[0]
   const acctColor = selectedAccount?.color ?? '#4f9cf9'
+
+  // Close the From dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (fromRef.current && !fromRef.current.contains(e.target as Node)) {
+        setFromOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const handleSend = async () => {
     if (!to.trim() || !fromAccountId) return
@@ -112,17 +125,38 @@ export default function ComposeModal({ accounts }: ComposeModalProps) {
         <div className={styles.form}>
           <div className={styles.field}>
             <label className={styles.label}>From</label>
-            <select
-              className={styles.select}
-              value={fromAccountId}
-              onChange={(e) => setFromAccountId(e.target.value)}
-            >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.email}
-                </option>
-              ))}
-            </select>
+            <div className={styles.customSelect} ref={fromRef}>
+              <button
+                type="button"
+                className={styles.selectTrigger}
+                onClick={() => setFromOpen((o) => !o)}
+              >
+                <span
+                  className={styles.selectDot}
+                  style={{ background: selectedAccount?.color }}
+                />
+                {selectedAccount?.email ?? 'Select account'}
+                <span className={styles.selectArrow}>{fromOpen ? '▴' : '▾'}</span>
+              </button>
+              {fromOpen && (
+                <div className={styles.selectDropdown}>
+                  {accounts.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className={`${styles.selectOption} ${a.id === fromAccountId ? styles.selectOptionActive : ''}`}
+                      onClick={() => {
+                        setFromAccountId(a.id)
+                        setFromOpen(false)
+                      }}
+                    >
+                      <span className={styles.selectDot} style={{ background: a.color }} />
+                      {a.email}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className={styles.field}>

@@ -42,6 +42,8 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::auth::save_week_start_day,
         commands::auth::load_auto_mark_read,
         commands::auth::save_auto_mark_read,
+        commands::auth::load_mail_filter,
+        commands::auth::save_mail_filter,
         commands::gmail::get_account_messages,
         commands::gmail::get_messages,
         commands::gmail::get_thread,

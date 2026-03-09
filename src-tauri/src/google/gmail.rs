@@ -96,7 +96,10 @@ fn extract_body(part: &MessagePart) -> (Option<String>, Option<String>) {
                 .as_ref()
                 .and_then(|b| b.data.as_deref())
                 .and_then(decode_base64url);
-            (html, None)
+            // If body.data is empty but sub-parts exist, recurse
+            if html.is_some() {
+                return (html, None);
+            }
         }
         "text/plain" => {
             let text = part
@@ -104,26 +107,32 @@ fn extract_body(part: &MessagePart) -> (Option<String>, Option<String>) {
                 .as_ref()
                 .and_then(|b| b.data.as_deref())
                 .and_then(decode_base64url);
-            (None, text)
-        }
-        _ if mime.starts_with("multipart/") => {
-            let mut html = None;
-            let mut text = None;
-            if let Some(parts) = &part.parts {
-                for sub in parts {
-                    let (h, t) = extract_body(sub);
-                    if h.is_some() {
-                        html = h;
-                    }
-                    if t.is_some() {
-                        text = t;
-                    }
-                }
+            if text.is_some() {
+                return (None, text);
             }
-            (html, text)
         }
-        _ => (None, None),
+        _ => {}
     }
+
+    // Recurse into sub-parts (multipart/*, or any type with nested parts)
+    if let Some(parts) = &part.parts {
+        let mut html = None;
+        let mut text = None;
+        for sub in parts {
+            let (h, t) = extract_body(sub);
+            if h.is_some() {
+                html = h;
+            }
+            if t.is_some() {
+                text = t;
+            }
+        }
+        if html.is_some() || text.is_some() {
+            return (html, text);
+        }
+    }
+
+    (None, None)
 }
 
 /// Extract attachments from MIME parts.
@@ -864,6 +873,31 @@ mod tests {
         let (html, text) = extract_body(&part);
         assert!(html.is_some());
         assert!(text.is_some());
+    }
+
+    #[test]
+    fn test_extract_body_missing_mime_type_with_parts() {
+        // Top-level part has no mimeType but contains sub-parts with content
+        let part = MessagePart {
+            mime_type: None,
+            headers: None,
+            body: None,
+            parts: Some(vec![MessagePart {
+                mime_type: Some("text/html".to_string()),
+                headers: None,
+                body: Some(MessageBody {
+                    attachment_id: None,
+                    size: Some(12),
+                    data: Some("PGI-SGk8L2I-".to_string()), // "<b>Hi</b>"
+                }),
+                parts: None,
+                filename: None,
+            }]),
+            filename: None,
+        };
+        let (html, text) = extract_body(&part);
+        assert_eq!(html, Some("<b>Hi</b>".to_string()));
+        assert!(text.is_none());
     }
 
     #[test]

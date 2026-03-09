@@ -116,9 +116,13 @@ export const useUIStore = create<UIState>((set, get) => ({
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   toggleMailFilter: (key) =>
-    set((state) => ({
-      mailFilter: { ...state.mailFilter, [key]: !state.mailFilter[key] },
-    })),
+    set((state) => {
+      const updated = { ...state.mailFilter, [key]: !state.mailFilter[key] }
+      invoke('save_mail_filter', { unread: updated.unread, starred: updated.starred }).catch(
+        (e: unknown) => console.warn('Failed to persist mail filter:', e),
+      )
+      return { mailFilter: updated }
+    }),
   setAutoMarkRead: (enabled) => {
     set({ autoMarkRead: enabled })
     invoke('save_auto_mark_read', { enabled }).catch((e: unknown) =>
@@ -170,5 +174,15 @@ export async function initAutoMarkRead(): Promise<void> {
     useUIStore.setState({ autoMarkRead: saved })
   } catch {
     // First launch or store unavailable — keep default (false)
+  }
+}
+
+/** Load the persisted mail filter state from the backend store. */
+export async function initMailFilter(): Promise<void> {
+  try {
+    const [unread, starred] = await invoke<[boolean, boolean]>('load_mail_filter')
+    useUIStore.setState({ mailFilter: { unread, starred } })
+  } catch {
+    // First launch or store unavailable — keep default (both false)
   }
 }

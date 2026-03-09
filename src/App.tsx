@@ -9,6 +9,7 @@ import {
   initWeekStartDay,
   initNotifications,
   initAutoMarkRead,
+  initMailFilter,
 } from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
@@ -191,6 +192,7 @@ function App() {
     initWeekStartDay()
     initNotifications()
     initAutoMarkRead()
+    initMailFilter()
   }, [])
 
   return (

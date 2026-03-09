@@ -98,3 +98,21 @@ pub async fn load_auto_mark_read(app: AppHandle) -> Result<bool, String> {
 pub async fn save_auto_mark_read(app: AppHandle, enabled: bool) -> Result<(), String> {
     store::save_auto_mark_read(&app, enabled)
 }
+
+/// Load the persisted mail filter state. Returns `(false, false)` if not set.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_mail_filter(app: AppHandle) -> Result<(bool, bool), String> {
+    Ok(store::load_mail_filter(&app)?.unwrap_or((false, false)))
+}
+
+/// Persist the mail filter state (unread, starred) to disk.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_mail_filter(
+    app: AppHandle,
+    unread: bool,
+    starred: bool,
+) -> Result<(), String> {
+    store::save_mail_filter(&app, unread, starred)
+}

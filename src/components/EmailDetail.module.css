@@ -142,6 +142,13 @@
   color: var(--text-primary);
   line-height: 1.75;
   font-size: 13px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.bodyHtml img {
+  max-width: 100%;
+  height: auto;
 }
 
 /* ── Actions ── */
