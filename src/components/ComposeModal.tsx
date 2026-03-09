@@ -131,10 +131,7 @@ export default function ComposeModal({ accounts }: ComposeModalProps) {
                 className={styles.selectTrigger}
                 onClick={() => setFromOpen((o) => !o)}
               >
-                <span
-                  className={styles.selectDot}
-                  style={{ background: selectedAccount?.color }}
-                />
+                <span className={styles.selectDot} style={{ background: selectedAccount?.color }} />
                 {selectedAccount?.email ?? 'Select account'}
                 <span className={styles.selectArrow}>{fromOpen ? '▴' : '▾'}</span>
               </button>

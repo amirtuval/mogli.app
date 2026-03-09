@@ -13,12 +13,10 @@ import styles from './EmailDetail.module.css'
  * - Remove on* event-handler attributes (onerror, onload, etc.)
  */
 function sanitizeHtml(html: string): string {
-  return (
-    html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
-      .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
-  )
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
 }
 
 interface EmailDetailProps {
