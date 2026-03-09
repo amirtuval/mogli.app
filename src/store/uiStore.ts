@@ -37,6 +37,7 @@ interface UIState {
   calendarWeekStart: string // ISO date string of the week's first day
   weekStartDay: WeekStartDay // 0 = Sunday, 1 = Monday
   notificationsEnabled: boolean // OS notification permission granted
+  searchQuery: string // active mail search query (empty = no search)
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -49,6 +50,7 @@ interface UIState {
   navigateWeek: (direction: -1 | 1) => void
   goToToday: () => void
   setNotificationsEnabled: (enabled: boolean) => void
+  setSearchQuery: (query: string) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -60,6 +62,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   weekStartDay: 1,
   calendarWeekStart: getWeekStart(new Date(), 1),
   notificationsEnabled: false,
+  searchQuery: '',
 
   setTheme: (theme) => {
     set({ theme })
@@ -98,6 +101,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     }),
   goToToday: () => set({ calendarWeekStart: getWeekStart(new Date(), get().weekStartDay) }),
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
 }))
 
 /** Load the persisted theme from the backend store and apply it. */

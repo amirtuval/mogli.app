@@ -9,6 +9,7 @@ interface EmailListProps {
   accounts: Account[]
   isLoading: boolean
   selectedLabel: string
+  searchQuery?: string
 }
 
 function formatMessageTime(dateUnix: number): string {
@@ -44,6 +45,7 @@ export default function EmailList({
   accounts,
   isLoading,
   selectedLabel,
+  searchQuery,
 }: EmailListProps) {
   const selectedThreadId = useUIStore((s) => s.selectedThreadId)
   const setSelectedThreadId = useUIStore((s) => s.setSelectedThreadId)
@@ -79,14 +81,16 @@ export default function EmailList({
     <div className={styles.container}>
       <div className={styles.header}>
         <span className={styles.headerInfo}>
-          {threadCount} threads · {labelName}
+          {searchQuery
+            ? `${threadCount} results · "${searchQuery}"`
+            : `${threadCount} threads · ${labelName}`}
         </span>
       </div>
 
       {threadCount === 0 ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>◈</div>
-          No messages
+          {searchQuery ? 'No results found' : 'No messages'}
         </div>
       ) : (
         messages?.map((email) => {

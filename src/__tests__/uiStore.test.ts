@@ -13,6 +13,7 @@ describe('uiStore', () => {
       calendarWeekStart: '2026-03-02',
       weekStartDay: 1,
       notificationsEnabled: false,
+      searchQuery: '',
     })
   })
 
@@ -132,6 +133,21 @@ describe('uiStore', () => {
     useUIStore.setState({ notificationsEnabled: true })
     useUIStore.getState().setNotificationsEnabled(false)
     expect(useUIStore.getState().notificationsEnabled).toBe(false)
+  })
+
+  it('should initialize searchQuery as empty string', () => {
+    expect(useUIStore.getState().searchQuery).toBe('')
+  })
+
+  it('should set search query', () => {
+    useUIStore.getState().setSearchQuery('invoice 2026')
+    expect(useUIStore.getState().searchQuery).toBe('invoice 2026')
+  })
+
+  it('should clear search query', () => {
+    useUIStore.setState({ searchQuery: 'something' })
+    useUIStore.getState().setSearchQuery('')
+    expect(useUIStore.getState().searchQuery).toBe('')
   })
 })
 

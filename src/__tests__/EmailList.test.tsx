@@ -135,4 +135,32 @@ describe('EmailList', () => {
 
     expect(screen.getByText('No messages')).toBeInTheDocument()
   })
+
+  it('should show search result count when searchQuery is set', () => {
+    render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+        searchQuery="Hello"
+      />,
+    )
+
+    expect(screen.getByText('2 results · "Hello"')).toBeInTheDocument()
+  })
+
+  it('should show "No results found" when searching with empty results', () => {
+    render(
+      <EmailList
+        messages={[]}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+        searchQuery="nonexistent"
+      />,
+    )
+
+    expect(screen.getByText('No results found')).toBeInTheDocument()
+  })
 })
