@@ -153,3 +153,36 @@ pub async fn mark_read(
     let email = get_account_email(&app, &account_id)?;
     gmail_api::mark_read(&creds, &email, &thread_id).await
 }
+
+/// Search messages across the given accounts.
+#[tauri::command]
+#[specta::specta]
+pub async fn search_messages(
+    app: AppHandle,
+    account_ids: Vec<String>,
+    query: String,
+) -> Result<Vec<MessageMeta>, String> {
+    let mut join_set = tokio::task::JoinSet::new();
+
+    for account_id in account_ids {
+        let app = app.clone();
+        let query = query.clone();
+        join_set.spawn(async move {
+            let creds = OAuthCredentials::load()?;
+            let email = get_account_email(&app, &account_id)?;
+            gmail_api::search_messages(&creds, &account_id, &email, &query).await
+        });
+    }
+
+    let mut all_messages = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(messages)) => all_messages.extend(messages),
+            Ok(Err(e)) => log::error!("Failed to search account: {e}"),
+            Err(e) => log::error!("Search task panicked: {e}"),
+        }
+    }
+
+    all_messages.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(all_messages)
+}

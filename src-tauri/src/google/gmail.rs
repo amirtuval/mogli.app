@@ -301,6 +301,88 @@ pub async fn fetch_messages(
     Ok(messages)
 }
 
+/// Search messages for a single account using Gmail's `q` parameter.
+pub async fn search_messages(
+    creds: &OAuthCredentials,
+    account_id: &str,
+    email: &str,
+    query: &str,
+) -> Result<Vec<MessageMeta>, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let encoded_query = urlencoding::encode(query);
+    let url = format!("{GMAIL_BASE_URL}/users/me/messages?q={encoded_query}&maxResults=50");
+
+    let list_resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail search request failed: {e}"))?;
+
+    if !list_resp.status().is_success() {
+        let body = list_resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail search failed: {body}"));
+    }
+
+    let list_data: ListMessagesResponse = list_resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse search results: {e}"))?;
+
+    let msg_refs = list_data.messages.unwrap_or_default();
+    if msg_refs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Fetch metadata for all messages in parallel
+    let mut join_set = tokio::task::JoinSet::new();
+    for msg_ref in msg_refs {
+        let client = client.clone();
+        let token = token.clone();
+        let account_id = account_id.to_string();
+        let msg_id = msg_ref.id;
+        join_set.spawn(async move {
+            let msg_url = format!(
+                "{GMAIL_BASE_URL}/users/me/messages/{msg_id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
+            );
+            let msg_resp = client
+                .get(&msg_url)
+                .bearer_auth(&token)
+                .send()
+                .await
+                .map_err(|e| format!("Gmail get message failed: {e}"))?;
+
+            if !msg_resp.status().is_success() {
+                return Err(format!(
+                    "Gmail get message {msg_id} failed: {}",
+                    msg_resp.status()
+                ));
+            }
+
+            let gmail_msg: GmailMessage = msg_resp
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse message: {e}"))?;
+            Ok(parse_message_meta(&gmail_msg, &account_id))
+        });
+    }
+
+    let mut messages = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(meta)) => messages.push(meta),
+            Ok(Err(e)) => log::warn!("Skipping search result: {e}"),
+            Err(e) => log::warn!("Search fetch task panicked: {e}"),
+        }
+    }
+
+    // Sort by date descending
+    messages.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(messages)
+}
+
 /// Fetch metadata for specific message IDs (used by the notification pipe).
 pub async fn fetch_messages_by_ids(
     creds: &OAuthCredentials,

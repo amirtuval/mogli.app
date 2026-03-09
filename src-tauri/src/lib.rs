@@ -46,6 +46,7 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::gmail::archive_thread,
         commands::gmail::star_thread,
         commands::gmail::mark_read,
+        commands::gmail::search_messages,
         commands::calendar::list_calendars,
         commands::calendar::set_calendar_enabled,
         commands::calendar::get_account_events,
