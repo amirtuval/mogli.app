@@ -24,6 +24,9 @@ import MailView from './components/MailView'
 import CalendarView from './components/CalendarView'
 import NotificationBanner from './components/NotificationBanner'
 import ComposeModal from './components/ComposeModal'
+import EventModal from './components/EventModal'
+import ReminderPopup from './components/ReminderPopup'
+import type { ReminderPayload } from './types/models'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,6 +46,7 @@ function AppShell() {
   const setActiveAccounts = useUIStore((s) => s.setActiveAccounts)
   const searchQuery = useUIStore((s) => s.searchQuery)
   const showCompose = useUIStore((s) => s.showCompose)
+  const showEventModal = useUIStore((s) => s.showEventModal)
 
   const { data: accounts = [] } = useAccounts()
   const { data: messages, isLoading: messagesLoading } = useMessages(activeAccounts, selectedLabel)
@@ -103,6 +107,16 @@ function AppShell() {
         useUIStore.getState().setSelectedThreadId(thread_id)
       },
     )
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
+  // Listen for calendar reminder events from the background reminder checker
+  useEffect(() => {
+    const unlisten = listen<ReminderPayload>('calendar:reminder', (event) => {
+      useUIStore.getState().addReminder(event.payload)
+    })
     return () => {
       unlisten.then((fn) => fn())
     }
@@ -179,6 +193,16 @@ function AppShell() {
         )}
       </main>
       {showCompose && <ComposeModal accounts={accounts} />}
+      {showEventModal && (
+        <EventModal
+          accounts={accounts}
+          calendars={calendars}
+          onCreated={() => {
+            queryClient.invalidateQueries({ queryKey: ['events'] })
+          }}
+        />
+      )}
+      <ReminderPopup />
     </div>
   )
 }

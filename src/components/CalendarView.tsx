@@ -1,10 +1,14 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { useQueryClient } from '@tanstack/react-query'
 import type { CalEvent, Account, Calendar } from '../types/models'
 import { useUIStore } from '../store/uiStore'
 import styles from './CalendarView.module.css'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i) // 00:00–23:00
 const ROW_HEIGHT = 56
+const SNAP_MINUTES = 15
+const MIN_DURATION_MINUTES = 15
 
 interface CalendarViewProps {
   events: CalEvent[] | undefined
@@ -113,6 +117,40 @@ function computeOverlapLayout(timedEvents: CalEvent[]): LayoutEvent[] {
   return result
 }
 
+function pad2(n: number): string {
+  return n.toString().padStart(2, '0')
+}
+
+/** Snap minutes to nearest SNAP_MINUTES increment (e.g. 15). */
+function snapMinutes(m: number): number {
+  return Math.round(m / SNAP_MINUTES) * SNAP_MINUTES
+}
+
+/** Convert minutes-since-midnight to "H:MM" display string. */
+function formatMinutes(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  return `${h}:${m.toString().padStart(2, '0')}`
+}
+
+interface DragState {
+  type: 'move' | 'resize'
+  eventId: string
+  event: CalEvent
+  /** Original start in minutes-since-midnight */
+  originalStartMin: number
+  /** Original end in minutes-since-midnight */
+  originalEndMin: number
+  /** Current (snapped) start during drag */
+  currentStartMin: number
+  /** Current (snapped) end during drag */
+  currentEndMin: number
+  /** Day index the event is currently over */
+  dayIndex: number
+  /** Original day index */
+  originalDayIndex: number
+}
+
 export default function CalendarView({
   events,
   calendars = [],
@@ -122,7 +160,9 @@ export default function CalendarView({
 }: CalendarViewProps) {
   const theme = useUIStore((s) => s.theme)
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
+  const openEventModal = useUIStore((s) => s.openEventModal)
   const isLight = theme === 'light'
+  const queryClient = useQueryClient()
 
   // Week days (Mon–Sun) as Date objects
   const weekDays = useMemo(() => {
@@ -155,6 +195,187 @@ export default function CalendarView({
     }, 60_000)
     return () => clearInterval(interval)
   }, [])
+
+  // ── Drag state ──
+  const [dragState, setDragState] = useState<DragState | null>(null)
+  const dragRef = useRef<DragState | null>(null)
+  const dayColumnRefs = useRef<(HTMLDivElement | null)[]>([])
+  const hourGridRefs = useRef<(HTMLDivElement | null)[]>([])
+  // Track whether a drag actually moved (to suppress click-to-create)
+  const didDragRef = useRef(false)
+
+  /** Convert clientY relative to an hour grid into snapped minutes-since-midnight. */
+  const clientYToMinutes = useCallback((clientY: number, dayIdx: number): number => {
+    const grid = hourGridRefs.current[dayIdx]
+    if (!grid) return 0
+    const rect = grid.getBoundingClientRect()
+    const offsetY = clientY - rect.top
+    const rawMinutes = (offsetY / ROW_HEIGHT) * 60
+    return Math.max(0, Math.min(24 * 60, snapMinutes(rawMinutes)))
+  }, [])
+
+  /** Determine which day column the cursor is over. */
+  const clientXToDayIndex = useCallback((clientX: number): number => {
+    for (let i = 0; i < dayColumnRefs.current.length; i++) {
+      const col = dayColumnRefs.current[i]
+      if (!col) continue
+      const rect = col.getBoundingClientRect()
+      if (clientX >= rect.left && clientX <= rect.right) return i
+    }
+    // Fallback: clamp to edges
+    const first = dayColumnRefs.current[0]
+    if (first && clientX < first.getBoundingClientRect().left) return 0
+    return 6
+  }, [])
+
+  /** Start a move or resize drag. */
+  const startDrag = useCallback(
+    (type: 'move' | 'resize', ev: CalEvent, dayIndex: number, e: React.MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+
+      const startDate = new Date(ev.start * 1000)
+      const endDate = new Date(ev.end * 1000)
+      const startMin = startDate.getHours() * 60 + startDate.getMinutes()
+      const endMin = endDate.getHours() * 60 + endDate.getMinutes()
+
+      const initial: DragState = {
+        type,
+        eventId: ev.id,
+        event: ev,
+        originalStartMin: startMin,
+        originalEndMin: endMin,
+        currentStartMin: startMin,
+        currentEndMin: endMin,
+        dayIndex,
+        originalDayIndex: dayIndex,
+      }
+
+      dragRef.current = initial
+      setDragState(initial)
+      didDragRef.current = false
+
+      const onMouseMove = (moveEvt: MouseEvent) => {
+        const prev = dragRef.current
+        if (!prev) return
+
+        if (type === 'resize') {
+          const newEnd = clientYToMinutes(moveEvt.clientY, prev.dayIndex)
+          const clampedEnd = Math.max(prev.currentStartMin + MIN_DURATION_MINUTES, newEnd)
+          if (clampedEnd !== prev.currentEndMin) {
+            didDragRef.current = true
+            const next = { ...prev, currentEndMin: clampedEnd }
+            dragRef.current = next
+            setDragState(next)
+          }
+        } else {
+          // Move
+          const newDayIndex = clientXToDayIndex(moveEvt.clientX)
+          const cursorMin = clientYToMinutes(moveEvt.clientY, newDayIndex)
+          const duration = prev.originalEndMin - prev.originalStartMin
+          const newStart = Math.max(
+            0,
+            Math.min(24 * 60 - duration, snapMinutes(cursorMin - duration / 2)),
+          )
+          const newEnd = newStart + duration
+          if (newStart !== prev.currentStartMin || newDayIndex !== prev.dayIndex) {
+            didDragRef.current = true
+            const next = {
+              ...prev,
+              currentStartMin: newStart,
+              currentEndMin: newEnd,
+              dayIndex: newDayIndex,
+            }
+            dragRef.current = next
+            setDragState(next)
+          }
+        }
+      }
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+        document.removeEventListener('keydown', onKeyDown)
+
+        const final = dragRef.current
+        dragRef.current = null
+        setDragState(null)
+
+        if (!final || !didDragRef.current) return
+
+        // Check if position actually changed
+        const changed =
+          final.currentStartMin !== final.originalStartMin ||
+          final.currentEndMin !== final.originalEndMin ||
+          final.dayIndex !== final.originalDayIndex
+
+        if (!changed) return
+
+        // Compute new unix timestamps
+        const targetDay = weekDays[final.dayIndex]
+        const newStartDate = new Date(targetDay)
+        newStartDate.setHours(
+          Math.floor(final.currentStartMin / 60),
+          final.currentStartMin % 60,
+          0,
+          0,
+        )
+        const newEndDate = new Date(targetDay)
+        newEndDate.setHours(Math.floor(final.currentEndMin / 60), final.currentEndMin % 60, 0, 0)
+
+        const newStart = Math.floor(newStartDate.getTime() / 1000)
+        const newEnd = Math.floor(newEndDate.getTime() / 1000)
+
+        // Optimistic update: update all events query caches
+        const previousCaches: { key: unknown[]; data: unknown }[] = []
+        queryClient.getQueriesData<CalEvent[]>({ queryKey: ['events'] }).forEach(([key, data]) => {
+          if (!data) return
+          previousCaches.push({ key, data })
+          queryClient.setQueryData<CalEvent[]>(key, (old) =>
+            old?.map((e) => (e.id === final.event.id ? { ...e, start: newStart, end: newEnd } : e)),
+          )
+        })
+
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+        invoke<CalEvent>('update_event', {
+          accountId: final.event.account_id,
+          calendarId: final.event.calendar_id,
+          eventId: final.event.id,
+          title: final.event.title,
+          start: newStart,
+          end: newEnd,
+          allDay: false,
+          timezone,
+          rest: {
+            location: final.event.location,
+            description: final.event.description,
+          },
+        }).catch(() => {
+          // Revert optimistic update on error
+          for (const { key, data } of previousCaches) {
+            queryClient.setQueryData(key, data)
+          }
+        })
+      }
+
+      const onKeyDown = (keyEvt: KeyboardEvent) => {
+        if (keyEvt.key === 'Escape') {
+          document.removeEventListener('mousemove', onMouseMove)
+          document.removeEventListener('mouseup', onMouseUp)
+          document.removeEventListener('keydown', onKeyDown)
+          dragRef.current = null
+          setDragState(null)
+          didDragRef.current = false
+        }
+      }
+
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+      document.addEventListener('keydown', onKeyDown)
+    },
+    [clientXToDayIndex, clientYToMinutes, queryClient, weekDays],
+  )
 
   // Group events by day, computing overlap layout for timed events
   const eventsByDay = useMemo(() => {
@@ -233,17 +454,116 @@ export default function CalendarView({
   }
 
   const formatHour = (h: number) => h.toString().padStart(2, '0') + ':00'
-  const formatMinutes = (totalMinutes: number) => {
-    const h = Math.floor(totalMinutes / 60)
-    const m = totalMinutes % 60
-    return `${h}:${m.toString().padStart(2, '0')}`
-  }
 
   const nowTop = (nowMinutes / 60) * ROW_HEIGHT
+  const isDragging = dragState !== null
+
+  /** Render a timed event block (used for both normal and dragged state). */
+  const renderEventBlock = (
+    ev: CalEvent,
+    column: number,
+    span: number,
+    totalColumns: number,
+    dayIndex: number,
+    isDraggedEvent: boolean,
+    overrideStartMin?: number,
+    overrideEndMin?: number,
+  ) => {
+    const startDate = new Date(ev.start * 1000)
+    const endDate = new Date(ev.end * 1000)
+    const startMinutes = overrideStartMin ?? startDate.getHours() * 60 + startDate.getMinutes()
+    const endMinutes = overrideEndMin ?? endDate.getHours() * 60 + endDate.getMinutes()
+    const durationMinutes = endMinutes - startMinutes
+    const top = (startMinutes / 60) * ROW_HEIGHT
+    const height = (durationMinutes / 60) * ROW_HEIGHT - 2
+    const color = eventColor(ev, accounts)
+
+    const startStr = formatMinutes(startMinutes)
+    const endStr = formatMinutes(endMinutes)
+
+    // Side-by-side: divide the column width evenly, expand by span
+    const colWidth = 100 / totalColumns
+    const leftPercent = column * colWidth
+    const widthPercent = colWidth * span
+
+    const cal = calendars.find((c) => c.id === ev.calendar_id)
+    const acct = accounts.find((a) => a.id === ev.account_id)
+    // Position popover above if event is in the lower half of the grid
+    const popoverAbove = startMinutes > 14 * 60
+
+    const blockClass = isDraggedEvent
+      ? `${styles.eventBlock} ${styles.eventBlockDragging}`
+      : styles.eventBlock
+
+    return (
+      <div
+        key={isDraggedEvent ? `${ev.id}-drag` : ev.id}
+        className={blockClass}
+        data-testid={isDraggedEvent ? undefined : `event-block-${ev.id}`}
+        style={{
+          top,
+          height: Math.max(height, 18),
+          left: `calc(${leftPercent}% + 1px)`,
+          width: `calc(${widthPercent}% - 2px)`,
+          background: color + (isLight ? '1a' : '26'),
+          borderLeft: `2.5px solid ${color}`,
+        }}
+        onMouseDown={(e) => {
+          if (!isDraggedEvent) startDrag('move', ev, dayIndex, e)
+        }}
+      >
+        <div className={styles.eventTitle} style={{ color }}>
+          {ev.title}
+        </div>
+        {height > 28 && (
+          <div className={styles.eventTime} style={{ color: color + '99' }}>
+            {startStr} – {endStr}
+          </div>
+        )}
+
+        {/* Resize handle at bottom edge */}
+        {!isDraggedEvent && (
+          <div
+            className={styles.resizeHandleEvent}
+            data-testid={`resize-handle-${ev.id}`}
+            onMouseDown={(e) => {
+              e.stopPropagation()
+              startDrag('resize', ev, dayIndex, e)
+            }}
+          />
+        )}
+
+        {/* Hover popover (suppressed during drag via CSS) */}
+        {!isDraggedEvent && (
+          <div className={`${styles.eventPopover} ${popoverAbove ? styles.eventPopoverAbove : ''}`}>
+            <div className={styles.popoverTitle}>{ev.title}</div>
+            <div className={styles.popoverRow}>
+              <span className={styles.popoverIcon}>◷</span>
+              {startStr} – {endStr}
+            </div>
+            {cal && (
+              <div className={styles.popoverRow}>
+                <span className={styles.popoverDot} style={{ background: cal.color || color }} />
+                {cal.name}
+                {acct && <span className={styles.popoverMuted}> · {acct.email}</span>}
+              </div>
+            )}
+            {ev.location && (
+              <div className={styles.popoverRow}>
+                <span className={styles.popoverIcon}>⌖</span>
+                {ev.location}
+              </div>
+            )}
+            {ev.description && <div className={styles.popoverDesc}>{ev.description}</div>}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
-      className={styles.container}
+      className={`${styles.container} ${isDragging ? styles.containerDragging : ''}`}
       style={{ opacity: isFetching ? 0.5 : 1, transition: 'opacity 0.15s ease' }}
     >
       {/* ── Sticky header: day names + all-day events ── */}
@@ -343,90 +663,87 @@ export default function CalendarView({
           const isTodayCol = isToday(day)
 
           return (
-            <div key={di} className={styles.dayColumn}>
-              <div className={styles.hourGrid}>
+            <div
+              key={di}
+              className={styles.dayColumn}
+              ref={(el) => {
+                dayColumnRefs.current[di] = el
+              }}
+            >
+              <div
+                className={styles.hourGrid}
+                ref={(el) => {
+                  hourGridRefs.current[di] = el
+                }}
+              >
                 {HOURS.map((h) => (
-                  <div key={h} className={styles.hourRow} />
+                  <div
+                    key={h}
+                    className={styles.hourRow}
+                    style={{ cursor: isDragging ? 'default' : 'crosshair' }}
+                    onClick={(e) => {
+                      // Suppress click-to-create during/after drag
+                      if (isDragging || didDragRef.current) {
+                        didDragRef.current = false
+                        return
+                      }
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const offsetY = e.clientY - rect.top
+                      const quarterSlot = Math.floor((offsetY / ROW_HEIGHT) * 4)
+                      const minutes = Math.min(quarterSlot * 15, 45)
+                      const startH = h
+                      const startM = minutes
+                      const endH = (startH + 1) % 24
+                      const dateStr = `${day.getFullYear()}-${pad2(day.getMonth() + 1)}-${pad2(day.getDate())}`
+                      openEventModal({
+                        date: dateStr,
+                        startTime: `${pad2(startH)}:${pad2(startM)}`,
+                        endTime: `${pad2(endH)}:${pad2(startM)}`,
+                      })
+                    }}
+                  />
                 ))}
 
                 {/* Timed events */}
                 {dayData.timed.map(({ event: ev, column, span, totalColumns }) => {
-                  const startDate = new Date(ev.start * 1000)
-                  const endDate = new Date(ev.end * 1000)
-                  const startMinutes = startDate.getHours() * 60 + startDate.getMinutes()
-                  const endMinutes = endDate.getHours() * 60 + endDate.getMinutes()
-                  const durationMinutes = endMinutes - startMinutes
-                  const top = (startMinutes / 60) * ROW_HEIGHT
-                  const height = (durationMinutes / 60) * ROW_HEIGHT - 2
-                  const color = eventColor(ev, accounts)
+                  // If this event is being dragged, render at the drag position
+                  const isBeingDragged = dragState?.eventId === ev.id
 
-                  const startStr = formatMinutes(startMinutes)
-                  const endStr = formatMinutes(endMinutes)
+                  if (isBeingDragged && dragState.dayIndex !== di) {
+                    // Event moved to a different day — don't render in original column
+                    return null
+                  }
 
-                  // Side-by-side: divide the column width evenly, expand by span
-                  const colWidth = 100 / totalColumns
-                  const leftPercent = column * colWidth
-                  const widthPercent = colWidth * span
+                  if (isBeingDragged) {
+                    return renderEventBlock(
+                      ev,
+                      column,
+                      span,
+                      totalColumns,
+                      di,
+                      true,
+                      dragState.currentStartMin,
+                      dragState.currentEndMin,
+                    )
+                  }
 
-                  const cal = calendars.find((c) => c.id === ev.calendar_id)
-                  const acct = accounts.find((a) => a.id === ev.account_id)
-                  // Position popover above if event is in the lower half of the grid
-                  const popoverAbove = startMinutes > 14 * 60
-
-                  return (
-                    <div
-                      key={ev.id}
-                      className={styles.eventBlock}
-                      style={{
-                        top,
-                        height: Math.max(height, 18),
-                        left: `calc(${leftPercent}% + 1px)`,
-                        width: `calc(${widthPercent}% - 2px)`,
-                        background: color + (isLight ? '1a' : '26'),
-                        borderLeft: `2.5px solid ${color}`,
-                      }}
-                    >
-                      <div className={styles.eventTitle} style={{ color }}>
-                        {ev.title}
-                      </div>
-                      {height > 28 && (
-                        <div className={styles.eventTime} style={{ color: color + '99' }}>
-                          {startStr} – {endStr}
-                        </div>
-                      )}
-
-                      {/* Hover popover */}
-                      <div
-                        className={`${styles.eventPopover} ${popoverAbove ? styles.eventPopoverAbove : ''}`}
-                      >
-                        <div className={styles.popoverTitle}>{ev.title}</div>
-                        <div className={styles.popoverRow}>
-                          <span className={styles.popoverIcon}>◷</span>
-                          {startStr} – {endStr}
-                        </div>
-                        {cal && (
-                          <div className={styles.popoverRow}>
-                            <span
-                              className={styles.popoverDot}
-                              style={{ background: cal.color || color }}
-                            />
-                            {cal.name}
-                            {acct && <span className={styles.popoverMuted}> · {acct.email}</span>}
-                          </div>
-                        )}
-                        {ev.location && (
-                          <div className={styles.popoverRow}>
-                            <span className={styles.popoverIcon}>⌖</span>
-                            {ev.location}
-                          </div>
-                        )}
-                        {ev.description && (
-                          <div className={styles.popoverDesc}>{ev.description}</div>
-                        )}
-                      </div>
-                    </div>
-                  )
+                  return renderEventBlock(ev, column, span, totalColumns, di, false)
                 })}
+
+                {/* Render dragged event in its new day column (if moved across days) */}
+                {dragState &&
+                  dragState.dayIndex === di &&
+                  dragState.originalDayIndex !== di &&
+                  renderEventBlock(
+                    dragState.event,
+                    0,
+                    1,
+                    1,
+                    di,
+                    true,
+                    dragState.currentStartMin,
+                    dragState.currentEndMin,
+                  )}
 
                 {/* Now line — only on today's column */}
                 {isTodayCol && (

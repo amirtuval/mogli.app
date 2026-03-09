@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import type { ComposeContext } from '../types/models'
+import type { ComposeContext, ReminderPayload, ActiveReminder } from '../types/models'
 
 export type Theme = 'light' | 'dark' | 'ultraDark'
 export type AppView = 'mail' | 'calendar'
@@ -43,6 +43,9 @@ interface UIState {
   autoMarkRead: boolean // auto-mark threads as read after 2s delay
   showCompose: boolean
   composeContext: ComposeContext | null
+  showEventModal: boolean
+  eventModalDefaults: { date: string; startTime: string; endTime: string } | null
+  activeReminders: ActiveReminder[]
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -60,6 +63,11 @@ interface UIState {
   setAutoMarkRead: (enabled: boolean) => void
   openCompose: (context: ComposeContext) => void
   closeCompose: () => void
+  openEventModal: (defaults?: { date: string; startTime: string; endTime: string }) => void
+  closeEventModal: () => void
+  addReminder: (payload: ReminderPayload) => void
+  dismissReminder: (eventId: string) => void
+  snoozeReminder: (eventId: string, minutes: number) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -76,6 +84,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   autoMarkRead: false,
   showCompose: false,
   composeContext: null,
+  showEventModal: false,
+  eventModalDefaults: null,
+  activeReminders: [],
 
   setTheme: (theme) => {
     set({ theme })
@@ -131,6 +142,39 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   openCompose: (context) => set({ showCompose: true, composeContext: context }),
   closeCompose: () => set({ showCompose: false, composeContext: null }),
+  openEventModal: (defaults) => set({ showEventModal: true, eventModalDefaults: defaults ?? null }),
+  closeEventModal: () => set({ showEventModal: false, eventModalDefaults: null }),
+  addReminder: (payload) =>
+    set((state) => {
+      // Deduplicate by eventId
+      if (state.activeReminders.some((r) => r.eventId === payload.event_id)) {
+        return state
+      }
+      const reminder: ActiveReminder = {
+        eventId: payload.event_id,
+        title: payload.title,
+        start: payload.start,
+        calendarName: payload.calendar_name,
+        calendarColor: payload.calendar_color,
+        minutesUntil: payload.minutes_until,
+        receivedAt: Date.now(),
+      }
+      return { activeReminders: [...state.activeReminders, reminder] }
+    }),
+  dismissReminder: (eventId) =>
+    set((state) => ({
+      activeReminders: state.activeReminders.filter((r) => r.eventId !== eventId),
+    })),
+  snoozeReminder: (eventId, minutes) => {
+    // Remove from active list immediately
+    set((state) => ({
+      activeReminders: state.activeReminders.filter((r) => r.eventId !== eventId),
+    }))
+    // Tell backend to clear the dedup entry
+    invoke('snooze_reminder', { eventId, snoozeMinutes: minutes }).catch((e: unknown) =>
+      console.warn('Failed to snooze reminder:', e),
+    )
+  },
 }))
 
 /** Load the persisted theme from the backend store and apply it. */

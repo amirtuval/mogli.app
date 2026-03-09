@@ -259,4 +259,69 @@ describe('CalendarView', () => {
     expect(todayHighlighted.length).toBe(1)
     expect(todayHighlighted[0].textContent).toBe(now.getDate().toString())
   })
+
+  // ── Drag & drop tests ──
+
+  it('renders resize handles on timed event blocks', () => {
+    const startLocal = new Date(2026, 2, 4, 9, 0, 0)
+    const endLocal = new Date(2026, 2, 4, 10, 0, 0)
+    const events = [
+      makeEvent({
+        start: startLocal.getTime() / 1000,
+        end: endLocal.getTime() / 1000,
+      }),
+    ]
+
+    render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    const handle = screen.getByTestId('resize-handle-ev1')
+    expect(handle).toBeDefined()
+  })
+
+  it('does not render resize handles on all-day events', () => {
+    const events = [
+      makeEvent({
+        id: 'ad1',
+        title: 'Holiday',
+        start: new Date('2026-03-04T00:00:00Z').getTime() / 1000,
+        end: new Date('2026-03-05T00:00:00Z').getTime() / 1000,
+        all_day: true,
+      }),
+    ]
+
+    render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    expect(screen.queryByTestId('resize-handle-ad1')).toBeNull()
+  })
+
+  it('renders event blocks with data-testid for drag interaction', () => {
+    const startLocal = new Date(2026, 2, 4, 14, 0, 0)
+    const endLocal = new Date(2026, 2, 4, 15, 0, 0)
+    const events = [
+      makeEvent({
+        id: 'ev-drag',
+        title: 'Draggable Event',
+        start: startLocal.getTime() / 1000,
+        end: endLocal.getTime() / 1000,
+      }),
+    ]
+
+    render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    const block = screen.getByTestId('event-block-ev-drag')
+    expect(block).toBeDefined()
+    expect(block.textContent).toContain('Draggable Event')
+  })
 })

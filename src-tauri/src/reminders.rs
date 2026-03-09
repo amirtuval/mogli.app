@@ -3,11 +3,12 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use log::{error, info, warn};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::interval;
 
 use crate::google::calendar as calendar_api;
 use crate::google::oauth::OAuthCredentials;
+use crate::models::ReminderPayload;
 use crate::store::{self, AccountStore};
 
 const REMINDER_CHECK_SECS: u64 = 60;
@@ -169,6 +170,17 @@ async fn check_account_events(
             if let Err(e) = crate::notify::send(&event.title, &body) {
                 error!("Failed to send calendar reminder notification: {e}");
             }
+
+            // Emit to frontend for in-app reminder cards
+            let payload = ReminderPayload {
+                event_id: event.id.clone(),
+                title: event.title.clone(),
+                start: event.start,
+                calendar_name: cal.name.clone(),
+                calendar_color: cal.color.clone(),
+                minutes_until,
+            };
+            let _ = app.emit("calendar:reminder", payload);
         }
     }
 }
@@ -236,5 +248,30 @@ mod tests {
         assert_eq!(ids.len(), 2);
         assert!(ids.contains("ev-1"));
         assert!(ids.contains("ev-2"));
+    }
+
+    #[test]
+    fn test_snooze_clears_dedup_entry() {
+        let notified = NotifiedEvents::new();
+
+        // Simulate initial notification
+        {
+            let mut ids = notified.ids.lock().unwrap();
+            ids.insert("ev-snooze".to_string());
+            ids.insert("ev-keep".to_string());
+        }
+
+        // Simulate snooze: remove the event so it can re-trigger
+        {
+            let mut ids = notified.ids.lock().unwrap();
+            ids.remove("ev-snooze");
+        }
+
+        // Verify the snoozed event is gone but others remain
+        {
+            let ids = notified.ids.lock().unwrap();
+            assert!(!ids.contains("ev-snooze"));
+            assert!(ids.contains("ev-keep"));
+        }
     }
 }

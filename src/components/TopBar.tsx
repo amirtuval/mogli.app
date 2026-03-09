@@ -22,6 +22,8 @@ export default function TopBar({ activeAccounts }: TopBarProps) {
 
   const [searchInput, setSearchInput] = useState(searchQuery)
 
+  const openEventModal = useUIStore((s) => s.openEventModal)
+
   if (activeView === 'calendar') {
     const weekStartDate = new Date(calendarWeekStart + 'T00:00:00')
     const monthName = weekStartDate.toLocaleDateString('en-US', {
@@ -31,12 +33,34 @@ export default function TopBar({ activeAccounts }: TopBarProps) {
     // ISO week number
     const weekNum = getISOWeekNumber(weekStartDate)
 
+    const handleNewEvent = () => {
+      const now = new Date()
+      const rounded = Math.ceil(now.getMinutes() / 15) * 15
+      const startH = rounded >= 60 ? now.getHours() + 1 : now.getHours()
+      const startM = rounded >= 60 ? 0 : rounded
+      const endH = (startH + 1) % 24
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+      openEventModal({
+        date: dateStr,
+        startTime: `${pad(startH % 24)}:${pad(startM)}`,
+        endTime: `${pad(endH)}:${pad(startM)}`,
+      })
+    }
+
     return (
       <div className={styles.topBar}>
         <div className={styles.calendarNav}>
           <span className={styles.monthLabel}>{monthName}</span>
           <span className={styles.weekLabel}>Week {weekNum}</span>
         </div>
+        <button
+          className={`${styles.navBtn} ${styles.createBtn}`}
+          onClick={handleNewEvent}
+          title="Create event"
+        >
+          +
+        </button>
         <div className={styles.navButtons}>
           <button className={styles.navBtn} onClick={() => navigateWeek(-1)}>
             ‹

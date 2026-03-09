@@ -1,8 +1,9 @@
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::google::calendar as calendar_api;
 use crate::google::oauth::OAuthCredentials;
 use crate::models::{CalEvent, Calendar};
+use crate::reminders::NotifiedEvents;
 use crate::store;
 
 /// List all calendars for an account. Merges enabled state from store.
@@ -130,4 +131,110 @@ pub async fn get_events(
 
     all_events.sort_by_key(|e| e.start);
     Ok(all_events)
+}
+
+/// Create a new calendar event via Google Calendar API.
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::too_many_arguments)]
+pub async fn create_event(
+    app: AppHandle,
+    account_id: String,
+    calendar_id: String,
+    title: String,
+    start: i64,
+    end: i64,
+    all_day: bool,
+    timezone: String,
+    location: Option<String>,
+    description: Option<String>,
+) -> Result<CalEvent, String> {
+    let creds = OAuthCredentials::load()?;
+    let email = store::account_email(&app, &account_id)?;
+    calendar_api::create_event(
+        &creds,
+        &account_id,
+        &email,
+        &calendar_id,
+        &title,
+        start,
+        end,
+        all_day,
+        &timezone,
+        location.as_deref(),
+        description.as_deref(),
+    )
+    .await
+}
+
+/// Update an existing calendar event via Google Calendar API.
+///
+/// Uses a request struct because specta supports at most 10 function parameters.
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::too_many_arguments)]
+pub async fn update_event(
+    app: AppHandle,
+    account_id: String,
+    calendar_id: String,
+    event_id: String,
+    title: String,
+    start: i64,
+    end: i64,
+    all_day: bool,
+    timezone: String,
+    rest: UpdateEventOptionals,
+) -> Result<CalEvent, String> {
+    let creds = OAuthCredentials::load()?;
+    let email = store::account_email(&app, &account_id)?;
+    calendar_api::update_event(
+        &creds,
+        &account_id,
+        &email,
+        &calendar_id,
+        &event_id,
+        &title,
+        start,
+        end,
+        all_day,
+        &timezone,
+        rest.location.as_deref(),
+        rest.description.as_deref(),
+    )
+    .await
+}
+
+/// Optional fields for `update_event`, bundled to stay within specta's 10-param limit.
+#[derive(Debug, serde::Deserialize, specta::Type)]
+pub struct UpdateEventOptionals {
+    pub location: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Dismiss a calendar reminder (frontend handles state; backend just logs).
+#[tauri::command]
+#[specta::specta]
+pub async fn dismiss_reminder(event_id: String) -> Result<(), String> {
+    log::info!("Reminder dismissed: {event_id}");
+    Ok(())
+}
+
+/// Snooze a calendar reminder by clearing its dedup entry so it can re-trigger.
+///
+/// The frontend handles the actual delay timing via `setTimeout`; the backend
+/// just removes the event from the notified set.
+#[tauri::command]
+#[specta::specta]
+pub async fn snooze_reminder(
+    app: AppHandle,
+    event_id: String,
+    snooze_minutes: i64,
+) -> Result<(), String> {
+    log::info!("Reminder snoozed: {event_id} for {snooze_minutes} min");
+
+    let state = app.state::<NotifiedEvents>();
+    let mut ids = state.ids.lock().map_err(|e| format!("Lock error: {e}"))?;
+    ids.remove(&event_id);
+
+    Ok(())
 }

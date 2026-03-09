@@ -1,5 +1,5 @@
 use chrono::{DateTime, NaiveDate, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::google::oauth::{OAuthCredentials, get_valid_token};
 use crate::models::{CalEvent, Calendar};
@@ -153,12 +153,185 @@ pub async fn fetch_events(
     Ok(events)
 }
 
+/// Create a new event on a Google Calendar via `events.insert`.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_event(
+    creds: &OAuthCredentials,
+    account_id: &str,
+    email: &str,
+    calendar_id: &str,
+    title: &str,
+    start: i64,
+    end: i64,
+    all_day: bool,
+    timezone: &str,
+    location: Option<&str>,
+    description: Option<&str>,
+) -> Result<CalEvent, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let body = build_event_body(title, start, end, all_day, timezone, location, description);
+    let encoded_cal_id = urlencoding::encode(calendar_id);
+    let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events");
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Create event request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("events.insert failed for {calendar_id}: {text}"));
+    }
+
+    let resource: EventResource = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse created event response: {e}"))?;
+
+    parse_event(resource, account_id, calendar_id)
+        .ok_or_else(|| "Created event missing required fields".to_string())
+}
+
+/// Update an existing event on a Google Calendar via `events.patch`.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_event(
+    creds: &OAuthCredentials,
+    account_id: &str,
+    email: &str,
+    calendar_id: &str,
+    event_id: &str,
+    title: &str,
+    start: i64,
+    end: i64,
+    all_day: bool,
+    timezone: &str,
+    location: Option<&str>,
+    description: Option<&str>,
+) -> Result<CalEvent, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let body = build_event_body(title, start, end, all_day, timezone, location, description);
+    let encoded_cal_id = urlencoding::encode(calendar_id);
+    let encoded_event_id = urlencoding::encode(event_id);
+    let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events/{encoded_event_id}");
+
+    let resp = client
+        .patch(&url)
+        .bearer_auth(&token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Update event request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "events.patch failed for {calendar_id}/{event_id}: {text}"
+        ));
+    }
+
+    let resource: EventResource = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse updated event response: {e}"))?;
+
+    parse_event(resource, account_id, calendar_id)
+        .ok_or_else(|| "Updated event missing required fields".to_string())
+}
+
+// --- Request body types ---
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventBody {
+    summary: String,
+    start: EventDateTimeBody,
+    end: EventDateTimeBody,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventDateTimeBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    time_zone: Option<String>,
+}
+
 // --- Helpers ---
+
+fn build_event_body(
+    title: &str,
+    start: i64,
+    end: i64,
+    all_day: bool,
+    timezone: &str,
+    location: Option<&str>,
+    description: Option<&str>,
+) -> EventBody {
+    let (start_body, end_body) = if all_day {
+        let start_date = timestamp_to_date_string(start);
+        let end_date = timestamp_to_date_string(end);
+        (
+            EventDateTimeBody {
+                date_time: None,
+                date: Some(start_date),
+                time_zone: None,
+            },
+            EventDateTimeBody {
+                date_time: None,
+                date: Some(end_date),
+                time_zone: None,
+            },
+        )
+    } else {
+        (
+            EventDateTimeBody {
+                date_time: Some(timestamp_to_rfc3339(start)),
+                date: None,
+                time_zone: Some(timezone.to_string()),
+            },
+            EventDateTimeBody {
+                date_time: Some(timestamp_to_rfc3339(end)),
+                date: None,
+                time_zone: Some(timezone.to_string()),
+            },
+        )
+    };
+
+    EventBody {
+        summary: title.to_string(),
+        start: start_body,
+        end: end_body,
+        location: location.map(String::from),
+        description: description.map(String::from),
+    }
+}
 
 fn timestamp_to_rfc3339(ts: i64) -> String {
     DateTime::from_timestamp(ts, 0)
         .unwrap_or_else(Utc::now)
         .to_rfc3339()
+}
+
+/// Convert a unix timestamp to a `YYYY-MM-DD` date string (UTC).
+fn timestamp_to_date_string(ts: i64) -> String {
+    DateTime::from_timestamp(ts, 0)
+        .unwrap_or_else(Utc::now)
+        .format("%Y-%m-%d")
+        .to_string()
 }
 
 /// Map a Google Calendar event `colorId` to its hex colour.
@@ -469,5 +642,82 @@ mod tests {
         let start = event.start.unwrap();
         assert!(start.date_time.is_none());
         assert_eq!(start.date.as_deref(), Some("2026-03-06"));
+    }
+
+    #[test]
+    fn test_build_event_body_timed() {
+        // 2026-03-06T09:00:00Z
+        let start_ts = DateTime::parse_from_rfc3339("2026-03-06T09:00:00Z")
+            .unwrap()
+            .timestamp();
+        let end_ts = DateTime::parse_from_rfc3339("2026-03-06T10:00:00Z")
+            .unwrap()
+            .timestamp();
+
+        let body = build_event_body(
+            "Meeting",
+            start_ts,
+            end_ts,
+            false,
+            "America/New_York",
+            Some("Room A"),
+            None,
+        );
+
+        let json: serde_json::Value = serde_json::to_value(&body).unwrap();
+        assert_eq!(json["summary"], "Meeting");
+        assert!(json["start"]["dateTime"].as_str().is_some());
+        assert_eq!(json["start"]["timeZone"], "America/New_York");
+        assert!(json["start"].get("date").is_none());
+        assert_eq!(json["location"], "Room A");
+        assert!(json.get("description").is_none()); // skipped via skip_serializing_if
+    }
+
+    #[test]
+    fn test_build_event_body_all_day() {
+        // 2026-03-06 midnight UTC
+        let start_ts = NaiveDate::from_ymd_opt(2026, 3, 6)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        // 2026-03-07 midnight UTC (Google uses exclusive end for all-day)
+        let end_ts = NaiveDate::from_ymd_opt(2026, 3, 7)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+
+        let body = build_event_body(
+            "Holiday",
+            start_ts,
+            end_ts,
+            true,
+            "UTC",
+            None,
+            Some("Day off"),
+        );
+
+        let json: serde_json::Value = serde_json::to_value(&body).unwrap();
+        assert_eq!(json["summary"], "Holiday");
+        assert_eq!(json["start"]["date"], "2026-03-06");
+        assert_eq!(json["end"]["date"], "2026-03-07");
+        assert!(json["start"].get("dateTime").is_none());
+        assert!(json["start"].get("timeZone").is_none());
+        assert!(json.get("location").is_none());
+        assert_eq!(json["description"], "Day off");
+    }
+
+    #[test]
+    fn test_timestamp_to_date_string() {
+        let ts = NaiveDate::from_ymd_opt(2026, 3, 6)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        assert_eq!(timestamp_to_date_string(ts), "2026-03-06");
     }
 }
