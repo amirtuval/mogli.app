@@ -27,3 +27,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 screenshots/
+
+# Ephemeral docs
+ephemeral-docs/
