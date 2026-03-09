@@ -49,6 +49,7 @@ describe('EmailList', () => {
       selectedThreadId: null,
       activeAccounts: ['a1', 'a2'],
       selectedLabel: 'INBOX',
+      mailFilter: { unread: false, starred: false },
     })
   })
 
@@ -134,5 +135,115 @@ describe('EmailList', () => {
     )
 
     expect(screen.getByText('No messages')).toBeInTheDocument()
+  })
+
+  it('should show search result count when searchQuery is set', () => {
+    render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+        searchQuery="Hello"
+      />,
+    )
+
+    expect(screen.getByText('2 results · "Hello"')).toBeInTheDocument()
+  })
+
+  it('should show "No results found" when searching with empty results', () => {
+    render(
+      <EmailList
+        messages={[]}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+        searchQuery="nonexistent"
+      />,
+    )
+
+    expect(screen.getByText('No results found')).toBeInTheDocument()
+  })
+
+  it('should render filter chip buttons', () => {
+    render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    expect(screen.getByText('Unread')).toBeInTheDocument()
+    expect(screen.getByText('Starred')).toBeInTheDocument()
+  })
+
+  it('should filter to unread messages when Unread chip is clicked', async () => {
+    const user = userEvent.setup()
+    render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    await user.click(screen.getByText('Unread'))
+
+    // Alice is unread, Bob is not
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.queryByText('Bob')).not.toBeInTheDocument()
+    expect(screen.getByText('1 of 2 threads · Inbox')).toBeInTheDocument()
+  })
+
+  it('should filter to starred messages when Starred chip is clicked', async () => {
+    const user = userEvent.setup()
+    render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    await user.click(screen.getByText('Starred'))
+
+    // Bob is starred, Alice is not
+    expect(screen.getByText('Bob')).toBeInTheDocument()
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+    expect(screen.getByText('1 of 2 threads · Inbox')).toBeInTheDocument()
+  })
+
+  it('should show "No matching messages" when filter matches nothing', async () => {
+    const user = userEvent.setup()
+    const readMessages: MessageMeta[] = [
+      {
+        id: 'm1',
+        thread_id: 't1',
+        account_id: 'a1',
+        from: 'Alice',
+        subject: 'Hello',
+        snippet: 'Hey there...',
+        date: Math.floor(Date.now() / 1000) - 300,
+        unread: false,
+        starred: false,
+        labels: ['INBOX'],
+      },
+    ]
+
+    render(
+      <EmailList
+        messages={readMessages}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    await user.click(screen.getByText('Unread'))
+    expect(screen.getByText('No matching messages')).toBeInTheDocument()
   })
 })

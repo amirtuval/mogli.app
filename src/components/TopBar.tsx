@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Account } from '../types/models'
 import { useUIStore } from '../store/uiStore'
 import styles from './TopBar.module.css'
@@ -8,7 +9,7 @@ interface TopBarProps {
 
 /**
  * Mode-aware TopBar.
- * - Mail mode: account avatar stack only (search added in Phase 5).
+ * - Mail mode: search bar + account avatars.
  * - Calendar mode: month/year + week number + ‹ Today › navigation + avatars.
  */
 export default function TopBar({ activeAccounts }: TopBarProps) {
@@ -16,6 +17,10 @@ export default function TopBar({ activeAccounts }: TopBarProps) {
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
   const navigateWeek = useUIStore((s) => s.navigateWeek)
   const goToToday = useUIStore((s) => s.goToToday)
+  const searchQuery = useUIStore((s) => s.searchQuery)
+  const setSearchQuery = useUIStore((s) => s.setSearchQuery)
+
+  const [searchInput, setSearchInput] = useState(searchQuery)
 
   if (activeView === 'calendar') {
     const weekStartDate = new Date(calendarWeekStart + 'T00:00:00')
@@ -54,10 +59,34 @@ export default function TopBar({ activeAccounts }: TopBarProps) {
     )
   }
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setSearchQuery(searchInput)
+  }
+
+  const clearSearch = () => {
+    setSearchInput('')
+    setSearchQuery('')
+  }
+
   // Mail mode (default)
   return (
     <div className={styles.topBar}>
-      <div className={styles.spacer} />
+      <form className={styles.searchForm} onSubmit={handleSearchSubmit}>
+        <span className={styles.searchIcon}>⌕</span>
+        <input
+          className={styles.searchInput}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search mail across all accounts..."
+        />
+        {searchQuery && (
+          <button type="button" className={styles.clearBtn} onClick={clearSearch}>
+            ✕
+          </button>
+        )}
+        <span className={styles.kbdHint}>⌘K</span>
+      </form>
       <div className={styles.avatarStack}>
         {activeAccounts.map((a) => (
           <div key={a.id} className={styles.avatar} style={{ background: a.color }}>

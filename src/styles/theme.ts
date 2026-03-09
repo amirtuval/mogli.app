@@ -89,4 +89,7 @@ export function applyTheme(theme: Theme): void {
   for (const [key, value] of Object.entries(vars)) {
     root.style.setProperty(key, value)
   }
+  // Tell the browser which color scheme to use for native form controls
+  // (select/option dropdowns, scrollbars, etc.)
+  root.style.colorScheme = theme === 'light' ? 'light' : 'dark'
 }

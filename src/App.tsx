@@ -3,10 +3,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { Account } from './types/models'
-import { useUIStore, initTheme, initWeekStartDay, initNotifications } from './store/uiStore'
+import {
+  useUIStore,
+  initTheme,
+  initWeekStartDay,
+  initNotifications,
+  initAutoMarkRead,
+  initMailFilter,
+} from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
 import { useMessages } from './hooks/useMessages'
+import { useSearchMessages } from './hooks/useSearchMessages'
 import { useAllCalendars } from './hooks/useCalendars'
 import { useEvents } from './hooks/useEvents'
 import WelcomePage from './components/WelcomePage'
@@ -15,6 +23,7 @@ import TopBar from './components/TopBar'
 import MailView from './components/MailView'
 import CalendarView from './components/CalendarView'
 import NotificationBanner from './components/NotificationBanner'
+import ComposeModal from './components/ComposeModal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,9 +41,19 @@ function AppShell() {
   const selectedLabel = useUIStore((s) => s.selectedLabel)
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
   const setActiveAccounts = useUIStore((s) => s.setActiveAccounts)
+  const searchQuery = useUIStore((s) => s.searchQuery)
+  const showCompose = useUIStore((s) => s.showCompose)
 
   const { data: accounts = [] } = useAccounts()
   const { data: messages, isLoading: messagesLoading } = useMessages(activeAccounts, selectedLabel)
+  const { data: searchResults, isLoading: searchLoading } = useSearchMessages(
+    activeAccounts,
+    searchQuery,
+  )
+
+  // When searching, show search results; otherwise show label-filtered messages
+  const activeMessages = searchQuery ? searchResults : messages
+  const activeMessagesLoading = searchQuery ? searchLoading : messagesLoading
 
   // Fetch calendars for all active accounts
   const { data: calendars = [] } = useAllCalendars(activeAccounts)
@@ -143,7 +162,11 @@ function AppShell() {
         <NotificationBanner />
         <TopBar activeAccounts={activeAccountObjects} />
         {activeView === 'mail' && (
-          <MailView accounts={accounts} messages={messages} isLoading={messagesLoading} />
+          <MailView
+            accounts={accounts}
+            messages={activeMessages}
+            isLoading={activeMessagesLoading}
+          />
         )}
         {activeView === 'calendar' && (
           <CalendarView
@@ -155,6 +178,7 @@ function AppShell() {
           />
         )}
       </main>
+      {showCompose && <ComposeModal accounts={accounts} />}
     </div>
   )
 }
@@ -167,6 +191,8 @@ function App() {
     initTheme()
     initWeekStartDay()
     initNotifications()
+    initAutoMarkRead()
+    initMailFilter()
   }, [])
 
   return (

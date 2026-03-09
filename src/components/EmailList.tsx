@@ -9,6 +9,7 @@ interface EmailListProps {
   accounts: Account[]
   isLoading: boolean
   selectedLabel: string
+  searchQuery?: string
 }
 
 function formatMessageTime(dateUnix: number): string {
@@ -44,9 +45,12 @@ export default function EmailList({
   accounts,
   isLoading,
   selectedLabel,
+  searchQuery,
 }: EmailListProps) {
   const selectedThreadId = useUIStore((s) => s.selectedThreadId)
   const setSelectedThreadId = useUIStore((s) => s.setSelectedThreadId)
+  const mailFilter = useUIStore((s) => s.mailFilter)
+  const toggleMailFilter = useUIStore((s) => s.toggleMailFilter)
 
   const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
 
@@ -62,6 +66,17 @@ export default function EmailList({
     return labels[selectedLabel] ?? selectedLabel
   }, [selectedLabel])
 
+  const isFiltered = mailFilter.unread || mailFilter.starred
+
+  const filteredMessages = useMemo(() => {
+    if (!messages || !isFiltered) return messages
+    return messages.filter((m) => {
+      if (mailFilter.unread && !m.unread) return false
+      if (mailFilter.starred && !m.starred) return false
+      return true
+    })
+  }, [messages, mailFilter, isFiltered])
+
   if (isLoading) {
     return (
       <div className={styles.container}>
@@ -73,23 +88,43 @@ export default function EmailList({
     )
   }
 
-  const threadCount = messages?.length ?? 0
+  const totalCount = messages?.length ?? 0
+  const displayMessages = filteredMessages ?? []
+  const displayCount = displayMessages.length
+
+  const headerText = searchQuery
+    ? `${displayCount} results · "${searchQuery}"`
+    : isFiltered
+      ? `${displayCount} of ${totalCount} threads · ${labelName}`
+      : `${totalCount} threads · ${labelName}`
 
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <span className={styles.headerInfo}>
-          {threadCount} threads · {labelName}
-        </span>
+        <span className={styles.headerInfo}>{headerText}</span>
+        <div className={styles.filterChips}>
+          <button
+            className={`${styles.filterChip} ${mailFilter.unread ? styles.filterChipActive : ''}`}
+            onClick={() => toggleMailFilter('unread')}
+          >
+            Unread
+          </button>
+          <button
+            className={`${styles.filterChip} ${mailFilter.starred ? styles.filterChipActive : ''}`}
+            onClick={() => toggleMailFilter('starred')}
+          >
+            Starred
+          </button>
+        </div>
       </div>
 
-      {threadCount === 0 ? (
+      {displayCount === 0 ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>◈</div>
-          No messages
+          {searchQuery ? 'No results found' : isFiltered ? 'No matching messages' : 'No messages'}
         </div>
       ) : (
-        messages?.map((email) => {
+        displayMessages.map((email) => {
           const acct = accountMap.get(email.account_id)
           const isSelected = selectedThreadId === email.thread_id
           const borderColor = acct?.color ?? '#666'

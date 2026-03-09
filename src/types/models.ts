@@ -72,6 +72,34 @@ export interface CalEvent {
   color: string | null
 }
 
+export interface SendMessageRequest {
+  account_id: string
+  to: string[]
+  cc: string[]
+  subject: string
+  body: string
+  in_reply_to?: string
+  references?: string
+}
+
+export type ComposeContext =
+  | { mode: 'new' }
+  | {
+      mode: 'reply'
+      threadId: string
+      accountId: string
+      to: string
+      subject: string
+      body: string
+    }
+  | {
+      mode: 'forward'
+      threadId: string
+      accountId: string
+      subject: string
+      body: string
+    }
+
 export const ACCOUNT_COLORS = [
   '#4f9cf9', // blue
   '#f97316', // orange

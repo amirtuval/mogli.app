@@ -27,6 +27,7 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
   const setSelectedLabel = useUIStore((s) => s.setSelectedLabel)
   const weekStartDay = useUIStore((s) => s.weekStartDay)
   const setWeekStartDay = useUIStore((s) => s.setWeekStartDay)
+  const openCompose = useUIStore((s) => s.openCompose)
   const addAccount = useAddAccount()
 
   const navItems: { id: AppView; icon: string; label: string; badge: number }[] = [
@@ -76,6 +77,13 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
           </button>
         ))}
       </div>
+
+      {/* Compose button (mail mode only) */}
+      {activeView === 'mail' && (
+        <button className={styles.composeBtn} onClick={() => openCompose({ mode: 'new' })}>
+          + Compose
+        </button>
+      )}
 
       {/* Accounts */}
       <div className={styles.accountsSection}>

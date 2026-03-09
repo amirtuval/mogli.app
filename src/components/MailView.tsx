@@ -14,6 +14,7 @@ interface MailViewProps {
 export default function MailView({ accounts, messages, isLoading }: MailViewProps) {
   const selectedLabel = useUIStore((s) => s.selectedLabel)
   const selectedThreadId = useUIStore((s) => s.selectedThreadId)
+  const searchQuery = useUIStore((s) => s.searchQuery)
 
   const selectedMessage = useMemo(
     () => messages?.find((m) => m.thread_id === selectedThreadId),
@@ -27,6 +28,7 @@ export default function MailView({ accounts, messages, isLoading }: MailViewProp
         accounts={accounts}
         isLoading={isLoading}
         selectedLabel={selectedLabel}
+        searchQuery={searchQuery}
       />
       <EmailDetail accounts={accounts} selectedMessage={selectedMessage} />
     </div>

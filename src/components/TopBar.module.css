@@ -74,3 +74,60 @@
 .todayBtn {
   color: #4f9cf9;
 }
+
+/* ── Mail search ── */
+.searchForm {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.searchIcon {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.clearBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+  font-family: inherit;
+  line-height: 1;
+}
+
+.clearBtn:hover {
+  color: var(--text-secondary);
+}
+
+.kbdHint {
+  background: var(--bg-btn);
+  color: var(--text-muted);
+  font-size: 9px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: 'IBM Plex Mono', monospace;
+  flex-shrink: 0;
+}

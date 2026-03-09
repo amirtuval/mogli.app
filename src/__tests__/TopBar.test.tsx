@@ -91,4 +91,32 @@ describe('TopBar', () => {
     // Should render without crashing
     expect(document.querySelector('[class*="topBar"]')).toBeInTheDocument()
   })
+
+  it('should render search input in mail mode', () => {
+    render(<TopBar activeAccounts={MOCK_ACCOUNTS} />)
+
+    expect(screen.getByPlaceholderText('Search mail across all accounts...')).toBeInTheDocument()
+  })
+
+  it('should update search query on form submit', async () => {
+    const user = userEvent.setup()
+    render(<TopBar activeAccounts={MOCK_ACCOUNTS} />)
+
+    const input = screen.getByPlaceholderText('Search mail across all accounts...')
+    await user.type(input, 'test query')
+    await user.keyboard('{Enter}')
+
+    expect(useUIStore.getState().searchQuery).toBe('test query')
+  })
+
+  it('should clear search query on clear button click', async () => {
+    useUIStore.setState({ searchQuery: 'existing search' })
+    const user = userEvent.setup()
+    render(<TopBar activeAccounts={MOCK_ACCOUNTS} />)
+
+    const clearBtn = screen.getByText('✕')
+    await user.click(clearBtn)
+
+    expect(useUIStore.getState().searchQuery).toBe('')
+  })
 })

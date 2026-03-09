@@ -16,6 +16,8 @@ const ACCOUNTS_KEY: &str = "accounts";
 const THEME_KEY: &str = "theme";
 const CALENDAR_ENABLED_KEY: &str = "calendar_enabled";
 const WEEK_START_DAY_KEY: &str = "week_start_day";
+const AUTO_MARK_READ_KEY: &str = "auto_mark_read";
+const MAIL_FILTER_KEY: &str = "mail_filter";
 
 /// In-memory account state, synced to disk via tauri-plugin-store.
 pub struct AccountStore {
@@ -142,6 +144,53 @@ pub fn save_week_start_day(app: &AppHandle, day: u8) -> Result<(), String> {
         .map_err(|e| format!("Failed to open store: {e}"))?;
 
     store.set(WEEK_START_DAY_KEY, serde_json::json!(day));
+    store.save().map_err(|e| format!("Save error: {e}"))?;
+    Ok(())
+}
+
+/// Load the persisted auto-mark-read preference. Returns `None` if not set.
+pub fn load_auto_mark_read(app: &AppHandle) -> Result<Option<bool>, String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    Ok(store.get(AUTO_MARK_READ_KEY).and_then(|v| v.as_bool()))
+}
+
+/// Persist the auto-mark-read preference to disk.
+pub fn save_auto_mark_read(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    store.set(AUTO_MARK_READ_KEY, serde_json::json!(enabled));
+    store.save().map_err(|e| format!("Save error: {e}"))?;
+    Ok(())
+}
+
+/// Load the persisted mail filter state. Returns `None` if not set.
+pub fn load_mail_filter(app: &AppHandle) -> Result<Option<(bool, bool)>, String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    Ok(store.get(MAIL_FILTER_KEY).and_then(|v| {
+        let unread = v.get("unread")?.as_bool()?;
+        let starred = v.get("starred")?.as_bool()?;
+        Some((unread, starred))
+    }))
+}
+
+/// Persist the mail filter state to disk.
+pub fn save_mail_filter(app: &AppHandle, unread: bool, starred: bool) -> Result<(), String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    store.set(
+        MAIL_FILTER_KEY,
+        serde_json::json!({ "unread": unread, "starred": starred }),
+    );
     store.save().map_err(|e| format!("Save error: {e}"))?;
     Ok(())
 }

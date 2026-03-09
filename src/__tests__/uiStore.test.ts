@@ -13,6 +13,11 @@ describe('uiStore', () => {
       calendarWeekStart: '2026-03-02',
       weekStartDay: 1,
       notificationsEnabled: false,
+      searchQuery: '',
+      mailFilter: { unread: false, starred: false },
+      autoMarkRead: false,
+      showCompose: false,
+      composeContext: null,
     })
   })
 
@@ -132,6 +137,74 @@ describe('uiStore', () => {
     useUIStore.setState({ notificationsEnabled: true })
     useUIStore.getState().setNotificationsEnabled(false)
     expect(useUIStore.getState().notificationsEnabled).toBe(false)
+  })
+
+  it('should initialize searchQuery as empty string', () => {
+    expect(useUIStore.getState().searchQuery).toBe('')
+  })
+
+  it('should set search query', () => {
+    useUIStore.getState().setSearchQuery('invoice 2026')
+    expect(useUIStore.getState().searchQuery).toBe('invoice 2026')
+  })
+
+  it('should clear search query', () => {
+    useUIStore.setState({ searchQuery: 'something' })
+    useUIStore.getState().setSearchQuery('')
+    expect(useUIStore.getState().searchQuery).toBe('')
+  })
+
+  it('should initialize mailFilter with both false', () => {
+    const { mailFilter } = useUIStore.getState()
+    expect(mailFilter).toEqual({ unread: false, starred: false })
+  })
+
+  it('should toggle unread filter on', () => {
+    useUIStore.getState().toggleMailFilter('unread')
+    expect(useUIStore.getState().mailFilter.unread).toBe(true)
+    expect(useUIStore.getState().mailFilter.starred).toBe(false)
+  })
+
+  it('should toggle unread filter off', () => {
+    useUIStore.setState({ mailFilter: { unread: true, starred: false } })
+    useUIStore.getState().toggleMailFilter('unread')
+    expect(useUIStore.getState().mailFilter.unread).toBe(false)
+  })
+
+  it('should toggle starred filter independently', () => {
+    useUIStore.getState().toggleMailFilter('starred')
+    expect(useUIStore.getState().mailFilter.starred).toBe(true)
+    expect(useUIStore.getState().mailFilter.unread).toBe(false)
+  })
+
+  it('should initialize autoMarkRead as false', () => {
+    expect(useUIStore.getState().autoMarkRead).toBe(false)
+  })
+
+  it('should set autoMarkRead to true', () => {
+    useUIStore.getState().setAutoMarkRead(true)
+    expect(useUIStore.getState().autoMarkRead).toBe(true)
+  })
+
+  it('should set autoMarkRead back to false', () => {
+    useUIStore.setState({ autoMarkRead: true })
+    useUIStore.getState().setAutoMarkRead(false)
+    expect(useUIStore.getState().autoMarkRead).toBe(false)
+  })
+
+  it('should set showCompose and composeContext with openCompose', () => {
+    useUIStore.getState().openCompose({ mode: 'new' })
+    const state = useUIStore.getState()
+    expect(state.showCompose).toBe(true)
+    expect(state.composeContext).toEqual({ mode: 'new' })
+  })
+
+  it('should clear showCompose and composeContext with closeCompose', () => {
+    useUIStore.getState().openCompose({ mode: 'new' })
+    useUIStore.getState().closeCompose()
+    const state = useUIStore.getState()
+    expect(state.showCompose).toBe(false)
+    expect(state.composeContext).toBeNull()
   })
 })
 

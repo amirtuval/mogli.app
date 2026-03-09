@@ -84,3 +84,31 @@ pub async fn load_week_start_day(app: AppHandle) -> Result<u8, String> {
 pub async fn save_week_start_day(app: AppHandle, day: u8) -> Result<(), String> {
     store::save_week_start_day(&app, day)
 }
+
+/// Load the persisted auto-mark-read preference. Returns `false` if not set.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_auto_mark_read(app: AppHandle) -> Result<bool, String> {
+    Ok(store::load_auto_mark_read(&app)?.unwrap_or(false))
+}
+
+/// Persist the auto-mark-read preference to disk.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_auto_mark_read(app: AppHandle, enabled: bool) -> Result<(), String> {
+    store::save_auto_mark_read(&app, enabled)
+}
+
+/// Load the persisted mail filter state. Returns `(false, false)` if not set.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_mail_filter(app: AppHandle) -> Result<(bool, bool), String> {
+    Ok(store::load_mail_filter(&app)?.unwrap_or((false, false)))
+}
+
+/// Persist the mail filter state (unread, starred) to disk.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_mail_filter(app: AppHandle, unread: bool, starred: bool) -> Result<(), String> {
+    store::save_mail_filter(&app, unread, starred)
+}

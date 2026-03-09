@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -6,6 +6,18 @@ import type { Account, MessageMeta } from '../types/models'
 import { useThread } from '../hooks/useThread'
 import { useUIStore } from '../store/uiStore'
 import styles from './EmailDetail.module.css'
+
+/**
+ * Strip dangerous content from email HTML:
+ * - Remove <script> blocks
+ * - Remove on* event-handler attributes (onerror, onload, etc.)
+ */
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
+}
 
 interface EmailDetailProps {
   accounts: Account[]
@@ -16,12 +28,51 @@ interface EmailDetailProps {
 export default function EmailDetail({ accounts, selectedMessage }: EmailDetailProps) {
   const selectedThreadId = useUIStore((s) => s.selectedThreadId)
   const theme = useUIStore((s) => s.theme)
+  const autoMarkRead = useUIStore((s) => s.autoMarkRead)
+  const setAutoMarkRead = useUIStore((s) => s.setAutoMarkRead)
   const queryClient = useQueryClient()
 
   const accountId = selectedMessage?.account_id ?? null
   const { data: thread, isLoading } = useThread(accountId, selectedThreadId)
 
   const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
+
+  // Auto-mark-read: mark thread as read after 2s if autoMarkRead is on
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
+    if (!autoMarkRead || !selectedMessage?.unread || !accountId || !selectedThreadId) return
+
+    timerRef.current = setTimeout(() => {
+      invoke('mark_read', { accountId, threadId: selectedThreadId }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['messages'] })
+        queryClient.invalidateQueries({ queryKey: ['search'] })
+      })
+    }, 2000)
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [autoMarkRead, selectedMessage?.unread, accountId, selectedThreadId, queryClient])
+
+  const handleMarkReadUnread = async () => {
+    if (!accountId || !selectedThreadId || !selectedMessage) return
+    const command = selectedMessage.unread ? 'mark_read' : 'mark_unread'
+    try {
+      await invoke(command, { accountId, threadId: selectedThreadId })
+      queryClient.invalidateQueries({ queryKey: ['messages'] })
+      queryClient.invalidateQueries({ queryKey: ['search'] })
+    } catch (e) {
+      console.error(`${command} failed:`, e)
+    }
+  }
 
   const handleArchive = async () => {
     if (!accountId || !selectedThreadId) return
@@ -34,12 +85,33 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
     }
   }
 
+  const openCompose = useUIStore((s) => s.openCompose)
+
   const handleReply = () => {
-    console.warn('Reply not yet implemented — Phase 2 stub')
+    if (!thread || !accountId) return
+    const lastMsg = thread.messages[thread.messages.length - 1]
+    if (!lastMsg) return
+    openCompose({
+      mode: 'reply',
+      threadId: thread.id,
+      accountId,
+      to: lastMsg.from,
+      subject: lastMsg.subject,
+      body: lastMsg.body_text ?? '',
+    })
   }
 
   const handleForward = () => {
-    console.warn('Forward not yet implemented — Phase 2 stub')
+    if (!thread || !accountId) return
+    const lastMsg = thread.messages[thread.messages.length - 1]
+    if (!lastMsg) return
+    openCompose({
+      mode: 'forward',
+      threadId: thread.id,
+      accountId,
+      subject: lastMsg.subject,
+      body: lastMsg.body_text ?? '',
+    })
   }
 
   if (!selectedThreadId) {
@@ -82,7 +154,17 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
   return (
     <div className={styles.container}>
       <div className={styles.headerSection}>
-        <div className={styles.subject}>{message.subject}</div>
+        <div className={styles.subjectRow}>
+          <div className={styles.subject}>{message.subject}</div>
+          <label className={styles.autoMarkReadToggle}>
+            <input
+              type="checkbox"
+              checked={autoMarkRead}
+              onChange={(e) => setAutoMarkRead(e.target.checked)}
+            />
+            <span className={styles.autoMarkReadLabel}>Auto-read</span>
+          </label>
+        </div>
         <div className={styles.senderRow}>
           <div className={styles.senderAvatar} style={{ background: acctColor }}>
             {message.from[0]?.toUpperCase() ?? '?'}
@@ -111,10 +193,14 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
         {message.body_html ? (
           <div
             className={styles.bodyHtml}
-            dangerouslySetInnerHTML={{ __html: message.body_html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.body_html) }}
           />
+        ) : message.body_text ? (
+          <div className={styles.bodyText}>{message.body_text}</div>
         ) : (
-          <div className={styles.bodyText}>{message.body_text ?? ''}</div>
+          <div className={styles.bodyText}>
+            {selectedMessage?.snippet || '(No content available)'}
+          </div>
         )}
       </div>
 
@@ -124,6 +210,9 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
         </button>
         <button className={styles.forwardBtn} onClick={handleForward}>
           ↪ Forward
+        </button>
+        <button className={styles.readToggleBtn} onClick={handleMarkReadUnread}>
+          {selectedMessage?.unread ? '✓ Mark read' : '○ Mark unread'}
         </button>
         <button className={styles.archiveBtn} onClick={handleArchive}>
           Archive

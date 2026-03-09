@@ -114,6 +114,26 @@
   background: #4f9cf9;
 }
 
+/* ── Compose button ── */
+.composeBtn {
+  margin: 10px 10px 0;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #4f9cf9;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.composeBtn:hover {
+  filter: brightness(1.1);
+}
+
 /* ── Accounts ── */
 .accountsSection {
   padding: 10px 0 6px;

@@ -43,12 +43,41 @@
   border-bottom: 1px solid var(--border);
 }
 
+.subjectRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .subject {
   font-size: 15px;
   color: var(--text-primary);
   font-weight: 500;
-  margin-bottom: 12px;
   line-height: 1.4;
+  flex: 1;
+  min-width: 0;
+}
+
+.autoMarkReadToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.autoMarkReadToggle input {
+  accent-color: #4f9cf9;
+  cursor: pointer;
+}
+
+.autoMarkReadLabel {
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .senderRow {
@@ -113,6 +142,13 @@
   color: var(--text-primary);
   line-height: 1.75;
   font-size: 13px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.bodyHtml img {
+  max-width: 100%;
+  height: auto;
 }
 
 /* ── Actions ── */
@@ -139,6 +175,21 @@
   font-size: 12px;
   background: transparent;
   color: var(--text-secondary);
+}
+
+.readToggleBtn {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 16px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.readToggleBtn:hover {
+  background: var(--bg-hover);
 }
 
 .archiveBtn {

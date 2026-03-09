@@ -96,7 +96,10 @@ fn extract_body(part: &MessagePart) -> (Option<String>, Option<String>) {
                 .as_ref()
                 .and_then(|b| b.data.as_deref())
                 .and_then(decode_base64url);
-            (html, None)
+            // If body.data is empty but sub-parts exist, recurse
+            if html.is_some() {
+                return (html, None);
+            }
         }
         "text/plain" => {
             let text = part
@@ -104,26 +107,32 @@ fn extract_body(part: &MessagePart) -> (Option<String>, Option<String>) {
                 .as_ref()
                 .and_then(|b| b.data.as_deref())
                 .and_then(decode_base64url);
-            (None, text)
-        }
-        _ if mime.starts_with("multipart/") => {
-            let mut html = None;
-            let mut text = None;
-            if let Some(parts) = &part.parts {
-                for sub in parts {
-                    let (h, t) = extract_body(sub);
-                    if h.is_some() {
-                        html = h;
-                    }
-                    if t.is_some() {
-                        text = t;
-                    }
-                }
+            if text.is_some() {
+                return (None, text);
             }
-            (html, text)
         }
-        _ => (None, None),
+        _ => {}
     }
+
+    // Recurse into sub-parts (multipart/*, or any type with nested parts)
+    if let Some(parts) = &part.parts {
+        let mut html = None;
+        let mut text = None;
+        for sub in parts {
+            let (h, t) = extract_body(sub);
+            if h.is_some() {
+                html = h;
+            }
+            if t.is_some() {
+                text = t;
+            }
+        }
+        if html.is_some() || text.is_some() {
+            return (html, text);
+        }
+    }
+
+    (None, None)
 }
 
 /// Extract attachments from MIME parts.
@@ -301,6 +310,88 @@ pub async fn fetch_messages(
     Ok(messages)
 }
 
+/// Search messages for a single account using Gmail's `q` parameter.
+pub async fn search_messages(
+    creds: &OAuthCredentials,
+    account_id: &str,
+    email: &str,
+    query: &str,
+) -> Result<Vec<MessageMeta>, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let encoded_query = urlencoding::encode(query);
+    let url = format!("{GMAIL_BASE_URL}/users/me/messages?q={encoded_query}&maxResults=50");
+
+    let list_resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail search request failed: {e}"))?;
+
+    if !list_resp.status().is_success() {
+        let body = list_resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail search failed: {body}"));
+    }
+
+    let list_data: ListMessagesResponse = list_resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse search results: {e}"))?;
+
+    let msg_refs = list_data.messages.unwrap_or_default();
+    if msg_refs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Fetch metadata for all messages in parallel
+    let mut join_set = tokio::task::JoinSet::new();
+    for msg_ref in msg_refs {
+        let client = client.clone();
+        let token = token.clone();
+        let account_id = account_id.to_string();
+        let msg_id = msg_ref.id;
+        join_set.spawn(async move {
+            let msg_url = format!(
+                "{GMAIL_BASE_URL}/users/me/messages/{msg_id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
+            );
+            let msg_resp = client
+                .get(&msg_url)
+                .bearer_auth(&token)
+                .send()
+                .await
+                .map_err(|e| format!("Gmail get message failed: {e}"))?;
+
+            if !msg_resp.status().is_success() {
+                return Err(format!(
+                    "Gmail get message {msg_id} failed: {}",
+                    msg_resp.status()
+                ));
+            }
+
+            let gmail_msg: GmailMessage = msg_resp
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse message: {e}"))?;
+            Ok(parse_message_meta(&gmail_msg, &account_id))
+        });
+    }
+
+    let mut messages = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(meta)) => messages.push(meta),
+            Ok(Err(e)) => log::warn!("Skipping search result: {e}"),
+            Err(e) => log::warn!("Search fetch task panicked: {e}"),
+        }
+    }
+
+    // Sort by date descending
+    messages.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(messages)
+}
+
 /// Fetch metadata for specific message IDs (used by the notification pipe).
 pub async fn fetch_messages_by_ids(
     creds: &OAuthCredentials,
@@ -461,6 +552,80 @@ pub async fn mark_read(
     thread_id: &str,
 ) -> Result<(), String> {
     modify_thread_labels(creds, email, thread_id, &[], &["UNREAD"]).await
+}
+
+/// Mark a thread as unread (add UNREAD label).
+pub async fn mark_unread(
+    creds: &OAuthCredentials,
+    email: &str,
+    thread_id: &str,
+) -> Result<(), String> {
+    modify_thread_labels(creds, email, thread_id, &["UNREAD"], &[]).await
+}
+
+/// Build an RFC 2822 message string from components.
+pub fn build_rfc2822(
+    from: &str,
+    to: &[String],
+    cc: &[String],
+    subject: &str,
+    body: &str,
+    in_reply_to: Option<&str>,
+    references: Option<&str>,
+) -> String {
+    let mut msg = String::new();
+    let _ = write!(msg, "From: {from}\r\n");
+    let _ = write!(msg, "To: {}\r\n", to.join(", "));
+    if !cc.is_empty() {
+        let _ = write!(msg, "Cc: {}\r\n", cc.join(", "));
+    }
+    let _ = write!(msg, "Subject: {subject}\r\n");
+    if let Some(irt) = in_reply_to {
+        let _ = write!(msg, "In-Reply-To: {irt}\r\n");
+    }
+    if let Some(refs) = references {
+        let _ = write!(msg, "References: {refs}\r\n");
+    }
+    let _ = write!(msg, "Content-Type: text/plain; charset=utf-8\r\n");
+    let _ = write!(msg, "\r\n{body}");
+    msg
+}
+
+/// Send an email via the Gmail API.
+#[allow(clippy::too_many_arguments)]
+pub async fn send_message(
+    creds: &OAuthCredentials,
+    email: &str,
+    to: &[String],
+    cc: &[String],
+    subject: &str,
+    body: &str,
+    in_reply_to: Option<&str>,
+    references: Option<&str>,
+) -> Result<(), String> {
+    let raw = build_rfc2822(email, to, cc, subject, body, in_reply_to, references);
+    let encoded = URL_SAFE_NO_PAD.encode(raw.as_bytes());
+
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!("{GMAIL_BASE_URL}/users/me/messages/send");
+    let send_body = serde_json::json!({ "raw": encoded });
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&send_body)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail send request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail send failed: {body}"));
+    }
+
+    Ok(())
 }
 
 // --- Incremental sync via history.list ---
@@ -711,6 +876,31 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_body_missing_mime_type_with_parts() {
+        // Top-level part has no mimeType but contains sub-parts with content
+        let part = MessagePart {
+            mime_type: None,
+            headers: None,
+            body: None,
+            parts: Some(vec![MessagePart {
+                mime_type: Some("text/html".to_string()),
+                headers: None,
+                body: Some(MessageBody {
+                    attachment_id: None,
+                    size: Some(12),
+                    data: Some("PGI-SGk8L2I-".to_string()), // "<b>Hi</b>"
+                }),
+                parts: None,
+                filename: None,
+            }]),
+            filename: None,
+        };
+        let (html, text) = extract_body(&part);
+        assert_eq!(html, Some("<b>Hi</b>".to_string()));
+        assert!(text.is_none());
+    }
+
+    #[test]
     fn test_multi_account_merge_sort() {
         // Simulate messages from two different accounts, merged and sorted by date desc
         let mut messages = vec![
@@ -800,5 +990,67 @@ mod tests {
         assert_eq!(atts[0].filename, "document.pdf");
         assert_eq!(atts[0].mime_type, "application/pdf");
         assert_eq!(atts[0].size, 12345);
+    }
+
+    #[test]
+    fn test_build_rfc2822_basic() {
+        let raw = build_rfc2822(
+            "me@example.com",
+            &["alice@example.com".to_string()],
+            &[],
+            "Hello",
+            "Hi Alice",
+            None,
+            None,
+        );
+        assert!(raw.contains("From: me@example.com\r\n"));
+        assert!(raw.contains("To: alice@example.com\r\n"));
+        assert!(raw.contains("Subject: Hello\r\n"));
+        assert!(raw.contains("Content-Type: text/plain; charset=utf-8\r\n"));
+        assert!(raw.contains("\r\nHi Alice"));
+        assert!(!raw.contains("Cc:"));
+        assert!(!raw.contains("In-Reply-To:"));
+        assert!(!raw.contains("References:"));
+    }
+
+    #[test]
+    fn test_build_rfc2822_with_cc_and_reply_headers() {
+        let raw = build_rfc2822(
+            "me@example.com",
+            &["alice@example.com".to_string()],
+            &[
+                "bob@example.com".to_string(),
+                "charlie@example.com".to_string(),
+            ],
+            "Re: Hello",
+            "Thanks!",
+            Some("<msg-id-123@mail.gmail.com>"),
+            Some("<msg-id-123@mail.gmail.com>"),
+        );
+        assert!(raw.contains("Cc: bob@example.com, charlie@example.com\r\n"));
+        assert!(raw.contains("In-Reply-To: <msg-id-123@mail.gmail.com>\r\n"));
+        assert!(raw.contains("References: <msg-id-123@mail.gmail.com>\r\n"));
+        assert!(raw.contains("Subject: Re: Hello\r\n"));
+    }
+
+    #[test]
+    fn test_rfc2822_base64url_encoding() {
+        let raw = build_rfc2822(
+            "me@example.com",
+            &["alice@example.com".to_string()],
+            &[],
+            "Test",
+            "Body",
+            None,
+            None,
+        );
+        let encoded = URL_SAFE_NO_PAD.encode(raw.as_bytes());
+        // Should be valid base64url (no +, /, or = characters)
+        assert!(!encoded.contains('+'));
+        assert!(!encoded.contains('/'));
+        assert!(!encoded.contains('='));
+        // Should decode back to original
+        let decoded = URL_SAFE_NO_PAD.decode(&encoded).unwrap();
+        assert_eq!(String::from_utf8(decoded).unwrap(), raw);
     }
 }

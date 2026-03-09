@@ -2,7 +2,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::google::gmail as gmail_api;
 use crate::google::oauth::OAuthCredentials;
-use crate::models::{MessageMeta, Thread};
+use crate::models::{MessageMeta, SendMessageRequest, Thread};
 use crate::store::AccountStore;
 
 /// Fetch messages for a single account and label.
@@ -152,4 +152,69 @@ pub async fn mark_read(
     let creds = OAuthCredentials::load()?;
     let email = get_account_email(&app, &account_id)?;
     gmail_api::mark_read(&creds, &email, &thread_id).await
+}
+
+/// Mark a thread as unread.
+#[tauri::command]
+#[specta::specta]
+pub async fn mark_unread(
+    app: AppHandle,
+    account_id: String,
+    thread_id: String,
+) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = get_account_email(&app, &account_id)?;
+    gmail_api::mark_unread(&creds, &email, &thread_id).await
+}
+
+/// Search messages across the given accounts.
+#[tauri::command]
+#[specta::specta]
+pub async fn search_messages(
+    app: AppHandle,
+    account_ids: Vec<String>,
+    query: String,
+) -> Result<Vec<MessageMeta>, String> {
+    let mut join_set = tokio::task::JoinSet::new();
+
+    for account_id in account_ids {
+        let app = app.clone();
+        let query = query.clone();
+        join_set.spawn(async move {
+            let creds = OAuthCredentials::load()?;
+            let email = get_account_email(&app, &account_id)?;
+            gmail_api::search_messages(&creds, &account_id, &email, &query).await
+        });
+    }
+
+    let mut all_messages = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(messages)) => all_messages.extend(messages),
+            Ok(Err(e)) => log::error!("Failed to search account: {e}"),
+            Err(e) => log::error!("Search task panicked: {e}"),
+        }
+    }
+
+    all_messages.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(all_messages)
+}
+
+/// Send an email from the specified account.
+#[tauri::command]
+#[specta::specta]
+pub async fn send_message(app: AppHandle, request: SendMessageRequest) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = get_account_email(&app, &request.account_id)?;
+    gmail_api::send_message(
+        &creds,
+        &email,
+        &request.to,
+        &request.cc,
+        &request.subject,
+        &request.body,
+        request.in_reply_to.as_deref(),
+        request.references.as_deref(),
+    )
+    .await
 }
