@@ -109,10 +109,6 @@ pub async fn load_mail_filter(app: AppHandle) -> Result<(bool, bool), String> {
 /// Persist the mail filter state (unread, starred) to disk.
 #[tauri::command]
 #[specta::specta]
-pub async fn save_mail_filter(
-    app: AppHandle,
-    unread: bool,
-    starred: bool,
-) -> Result<(), String> {
+pub async fn save_mail_filter(app: AppHandle, unread: bool, starred: bool) -> Result<(), String> {
     store::save_mail_filter(&app, unread, starred)
 }
