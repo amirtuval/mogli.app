@@ -101,7 +101,7 @@ describe('EmailDetail', () => {
     })
   })
 
-  it('should render Reply and Forward stub buttons', async () => {
+  it('should render Reply and Forward buttons', async () => {
     mockedInvoke.mockResolvedValueOnce(MOCK_THREAD)
 
     renderWithQuery(
@@ -112,6 +112,57 @@ describe('EmailDetail', () => {
       expect(screen.getByText('↩ Reply')).toBeInTheDocument()
     })
     expect(screen.getByText('↪ Forward')).toBeInTheDocument()
+  })
+
+  it('should open compose with reply context when Reply is clicked', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD)
+
+    renderWithQuery(
+      <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('↩ Reply')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('↩ Reply'))
+
+    const state = useUIStore.getState()
+    expect(state.showCompose).toBe(true)
+    expect(state.composeContext).toEqual({
+      mode: 'reply',
+      threadId: 't1',
+      accountId: 'a1',
+      to: 'Alice Sender',
+      subject: 'Important Subject',
+      body: 'Hello from Alice',
+    })
+  })
+
+  it('should open compose with forward context when Forward is clicked', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD)
+
+    renderWithQuery(
+      <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('↪ Forward')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('↪ Forward'))
+
+    const state = useUIStore.getState()
+    expect(state.showCompose).toBe(true)
+    expect(state.composeContext).toEqual({
+      mode: 'forward',
+      threadId: 't1',
+      accountId: 'a1',
+      subject: 'Important Subject',
+      body: 'Hello from Alice',
+    })
   })
 
   it('should call archive_thread when Archive is clicked', async () => {

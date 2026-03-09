@@ -73,12 +73,33 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
     }
   }
 
+  const openCompose = useUIStore((s) => s.openCompose)
+
   const handleReply = () => {
-    console.warn('Reply not yet implemented — Phase 5 compose')
+    if (!thread || !accountId) return
+    const lastMsg = thread.messages[thread.messages.length - 1]
+    if (!lastMsg) return
+    openCompose({
+      mode: 'reply',
+      threadId: thread.id,
+      accountId,
+      to: lastMsg.from,
+      subject: lastMsg.subject,
+      body: lastMsg.body_text ?? '',
+    })
   }
 
   const handleForward = () => {
-    console.warn('Forward not yet implemented — Phase 5 compose')
+    if (!thread || !accountId) return
+    const lastMsg = thread.messages[thread.messages.length - 1]
+    if (!lastMsg) return
+    openCompose({
+      mode: 'forward',
+      threadId: thread.id,
+      accountId,
+      subject: lastMsg.subject,
+      body: lastMsg.body_text ?? '',
+    })
   }
 
   if (!selectedThreadId) {

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
+import type { ComposeContext } from '../types/models'
 
 export type Theme = 'light' | 'dark' | 'ultraDark'
 export type AppView = 'mail' | 'calendar'
@@ -40,6 +41,8 @@ interface UIState {
   searchQuery: string // active mail search query (empty = no search)
   mailFilter: { unread: boolean; starred: boolean } // client-side filter chips
   autoMarkRead: boolean // auto-mark threads as read after 2s delay
+  showCompose: boolean
+  composeContext: ComposeContext | null
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -55,6 +58,8 @@ interface UIState {
   setSearchQuery: (query: string) => void
   toggleMailFilter: (key: 'unread' | 'starred') => void
   setAutoMarkRead: (enabled: boolean) => void
+  openCompose: (context: ComposeContext) => void
+  closeCompose: () => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -69,6 +74,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   searchQuery: '',
   mailFilter: { unread: false, starred: false },
   autoMarkRead: false,
+  showCompose: false,
+  composeContext: null,
 
   setTheme: (theme) => {
     set({ theme })
@@ -118,6 +125,8 @@ export const useUIStore = create<UIState>((set, get) => ({
       console.warn('Failed to persist auto-mark-read:', e),
     )
   },
+  openCompose: (context) => set({ showCompose: true, composeContext: context }),
+  closeCompose: () => set({ showCompose: false, composeContext: null }),
 }))
 
 /** Load the persisted theme from the backend store and apply it. */

@@ -22,6 +22,7 @@ import TopBar from './components/TopBar'
 import MailView from './components/MailView'
 import CalendarView from './components/CalendarView'
 import NotificationBanner from './components/NotificationBanner'
+import ComposeModal from './components/ComposeModal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,7 @@ function AppShell() {
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
   const setActiveAccounts = useUIStore((s) => s.setActiveAccounts)
   const searchQuery = useUIStore((s) => s.searchQuery)
+  const showCompose = useUIStore((s) => s.showCompose)
 
   const { data: accounts = [] } = useAccounts()
   const { data: messages, isLoading: messagesLoading } = useMessages(activeAccounts, selectedLabel)
@@ -175,6 +177,7 @@ function AppShell() {
           />
         )}
       </main>
+      {showCompose && <ComposeModal accounts={accounts} />}
     </div>
   )
 }

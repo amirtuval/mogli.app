@@ -16,6 +16,8 @@ describe('uiStore', () => {
       searchQuery: '',
       mailFilter: { unread: false, starred: false },
       autoMarkRead: false,
+      showCompose: false,
+      composeContext: null,
     })
   })
 
@@ -188,6 +190,21 @@ describe('uiStore', () => {
     useUIStore.setState({ autoMarkRead: true })
     useUIStore.getState().setAutoMarkRead(false)
     expect(useUIStore.getState().autoMarkRead).toBe(false)
+  })
+
+  it('should set showCompose and composeContext with openCompose', () => {
+    useUIStore.getState().openCompose({ mode: 'new' })
+    const state = useUIStore.getState()
+    expect(state.showCompose).toBe(true)
+    expect(state.composeContext).toEqual({ mode: 'new' })
+  })
+
+  it('should clear showCompose and composeContext with closeCompose', () => {
+    useUIStore.getState().openCompose({ mode: 'new' })
+    useUIStore.getState().closeCompose()
+    const state = useUIStore.getState()
+    expect(state.showCompose).toBe(false)
+    expect(state.composeContext).toBeNull()
   })
 })
 

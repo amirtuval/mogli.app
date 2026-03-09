@@ -137,4 +137,30 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('+ Add account')).toBeInTheDocument()
   })
+
+  it('should show Compose button in mail mode', () => {
+    useUIStore.setState({ activeView: 'mail' })
+    renderSidebar()
+
+    expect(screen.getByText('+ Compose')).toBeInTheDocument()
+  })
+
+  it('should not show Compose button in calendar mode', () => {
+    useUIStore.setState({ activeView: 'calendar' })
+    renderSidebar()
+
+    expect(screen.queryByText('+ Compose')).not.toBeInTheDocument()
+  })
+
+  it('should open compose modal when Compose is clicked', async () => {
+    const user = userEvent.setup()
+    useUIStore.setState({ activeView: 'mail' })
+    renderSidebar()
+
+    await user.click(screen.getByText('+ Compose'))
+
+    const state = useUIStore.getState()
+    expect(state.showCompose).toBe(true)
+    expect(state.composeContext).toEqual({ mode: 'new' })
+  })
 })
