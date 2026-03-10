@@ -80,6 +80,7 @@ export default function TopBar({ activeAccounts }: TopBarProps) {
       const pad = (n: number) => n.toString().padStart(2, '0')
       const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
       openEventModal({
+        mode: 'create',
         date: dateStr,
         startTime: `${pad(startH % 24)}:${pad(startM)}`,
         endTime: `${pad(endH)}:${pad(startM)}`,

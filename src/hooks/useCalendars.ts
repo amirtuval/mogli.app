@@ -27,7 +27,12 @@ export function useAllCalendars(accountIds: string[]) {
 export function useSetCalendarEnabled() {
   const queryClient = useQueryClient()
 
-  return useMutation<void, string, { accountId: string; calendarId: string; enabled: boolean }>({
+  return useMutation<
+    void,
+    string,
+    { accountId: string; calendarId: string; enabled: boolean },
+    { previous: [readonly unknown[], Calendar[] | undefined][] }
+  >({
     mutationFn: ({ accountId, calendarId, enabled }) =>
       invoke<void>('set_calendar_enabled', { accountId, calendarId, enabled }),
     onMutate: async ({ accountId, calendarId, enabled }) => {

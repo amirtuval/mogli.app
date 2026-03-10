@@ -331,7 +331,7 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
     setSending(true)
 
     // Optimistic remove from cache
-    const previousCaches: { key: unknown[]; data: unknown }[] = []
+    const previousCaches: { key: readonly unknown[]; data: unknown }[] = []
     queryClient.getQueriesData<CalEvent[]>({ queryKey: ['events'] }).forEach(([key, data]) => {
       if (!data) return
       previousCaches.push({ key, data })

@@ -402,7 +402,7 @@ export default function CalendarView({
         const newEnd = Math.floor(newEndDate.getTime() / 1000)
 
         // Optimistic update: update all events query caches
-        const previousCaches: { key: unknown[]; data: unknown }[] = []
+        const previousCaches: { key: readonly unknown[]; data: unknown }[] = []
         queryClient.getQueriesData<CalEvent[]>({ queryKey: ['events'] }).forEach(([key, data]) => {
           if (!data) return
           previousCaches.push({ key, data })
