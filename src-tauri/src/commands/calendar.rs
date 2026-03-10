@@ -2,8 +2,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::google::calendar as calendar_api;
 use crate::google::oauth::OAuthCredentials;
-use crate::models::{CalEvent, Calendar};
 use crate::models::ReminderPayload;
+use crate::models::{CalEvent, Calendar};
 use crate::reminders::{ActiveReminders, NotifiedEvents};
 use crate::store;
 

@@ -255,9 +255,8 @@ pub fn show_reminder_window(app: &AppHandle) {
                 let margin = 20.0;
                 let x = mon_x + mon_w - f64::from(WIDTH) - margin;
                 let y = mon_y + mon_h - f64::from(HEIGHT) - margin - 40.0;
-                let _ = win.set_position(tauri::Position::Logical(
-                    tauri::LogicalPosition::new(x, y),
-                ));
+                let _ =
+                    win.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
             }
         }
         Err(e) => {
