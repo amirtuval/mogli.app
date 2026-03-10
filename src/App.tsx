@@ -25,6 +25,7 @@ import MailView from './components/MailView'
 import CalendarView from './components/CalendarView'
 import MonthView from './components/MonthView'
 import NotificationBanner from './components/NotificationBanner'
+import UpdateBanner from './components/UpdateBanner'
 import ComposeModal from './components/ComposeModal'
 import EventModal from './components/EventModal'
 import type { ReminderPayload } from './types/models'
@@ -184,6 +185,7 @@ function AppShell() {
           color: 'var(--text-primary)',
         }}
       >
+        <UpdateBanner />
         <NotificationBanner />
         <TopBar activeAccounts={activeAccountObjects} />
         {activeView === 'mail' && (

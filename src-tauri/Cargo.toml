@@ -37,6 +37,8 @@ base64 = "0.22"
 urlencoding = "2"
 dotenvy = "0.15"
 tauri-plugin-window-state = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 notify-rust = "4"
 
 [dev-dependencies]
