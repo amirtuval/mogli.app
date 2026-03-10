@@ -1,0 +1,134 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  padding: 12px 14px;
+  animation: slideIn 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colorDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.dismiss:hover {
+  color: var(--text-primary);
+}
+
+.timeText {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding-left: 16px;
+}
+
+.calendarName {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding-left: 16px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 16px;
+  margin-top: 2px;
+}
+
+.snoozeBtn {
+  position: relative;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 3px 8px;
+  transition: background 0.1s;
+}
+
+.snoozeBtn:hover {
+  background: var(--bg-hover);
+}
+
+.snoozeDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.24);
+  padding: 4px 0;
+  z-index: 10;
+  min-width: 100px;
+}
+
+.snoozeOption {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.snoozeOption:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

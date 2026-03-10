@@ -100,6 +100,25 @@ export type ComposeContext =
       body: string
     }
 
+export interface ReminderPayload {
+  event_id: string
+  title: string
+  start: number
+  calendar_name: string
+  calendar_color: string
+  minutes_until: number
+}
+
+export interface ActiveReminder {
+  eventId: string
+  title: string
+  start: number
+  calendarName: string
+  calendarColor: string
+  minutesUntil: number
+  receivedAt: number // Date.now() when the reminder was received
+}
+
 export const ACCOUNT_COLORS = [
   '#4f9cf9', // blue
   '#f97316', // orange

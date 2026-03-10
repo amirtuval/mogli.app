@@ -1,12 +1,30 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import type { ComposeContext } from '../types/models'
+import type { ComposeContext, ReminderPayload, ActiveReminder } from '../types/models'
 
 export type Theme = 'light' | 'dark' | 'ultraDark'
 export type AppView = 'mail' | 'calendar'
+export type CalendarViewMode = 'day' | 'week' | 'month'
 
 /** 0 = Sunday, 1 = Monday */
 export type WeekStartDay = 0 | 1
+
+export interface EventModalData {
+  mode: 'create' | 'edit'
+  date: string
+  startTime: string
+  endTime: string
+  /** Only present in edit mode */
+  eventId?: string
+  accountId?: string
+  calendarId?: string
+  title?: string
+  allDay?: boolean
+  location?: string
+  description?: string
+  recurrence?: string
+  reminders?: number[]
+}
 
 const VALID_THEMES: Theme[] = ['light', 'dark', 'ultraDark']
 
@@ -29,13 +47,31 @@ export function getWeekStart(date: Date, weekStartDay: WeekStartDay = 1): string
 /** @deprecated Use getWeekStart instead */
 export const getMonday = (date: Date): string => getWeekStart(date, 1)
 
+/** Return today as an ISO date string YYYY-MM-DD. */
+export function todayISO(): string {
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+/** Return the first day of the month containing `date` as YYYY-MM-DD. */
+export function getMonthStart(date: Date): string {
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  return `${yyyy}-${mm}-01`
+}
+
 interface UIState {
   theme: Theme
   activeView: AppView
   activeAccounts: string[] // account IDs that are toggled on
   selectedThreadId: string | null
   selectedLabel: string
+  calendarViewMode: CalendarViewMode
   calendarWeekStart: string // ISO date string of the week's first day
+  calendarViewDate: string // ISO date string for day/month view focus
   weekStartDay: WeekStartDay // 0 = Sunday, 1 = Monday
   notificationsEnabled: boolean // OS notification permission granted
   searchQuery: string // active mail search query (empty = no search)
@@ -43,6 +79,9 @@ interface UIState {
   autoMarkRead: boolean // auto-mark threads as read after 2s delay
   showCompose: boolean
   composeContext: ComposeContext | null
+  showEventModal: boolean
+  eventModalDefaults: EventModalData | null
+  activeReminders: ActiveReminder[]
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -53,13 +92,22 @@ interface UIState {
   setCalendarWeekStart: (start: string) => void
   setWeekStartDay: (day: WeekStartDay) => void
   navigateWeek: (direction: -1 | 1) => void
+  navigateDay: (direction: -1 | 1) => void
+  navigateMonth: (direction: -1 | 1) => void
   goToToday: () => void
+  setCalendarViewMode: (mode: CalendarViewMode) => void
+  setCalendarViewDate: (date: string) => void
   setNotificationsEnabled: (enabled: boolean) => void
   setSearchQuery: (query: string) => void
   toggleMailFilter: (key: 'unread' | 'starred') => void
   setAutoMarkRead: (enabled: boolean) => void
   openCompose: (context: ComposeContext) => void
   closeCompose: () => void
+  openEventModal: (defaults?: EventModalData) => void
+  closeEventModal: () => void
+  addReminder: (payload: ReminderPayload) => void
+  dismissReminder: (eventId: string) => void
+  snoozeReminder: (eventId: string, minutes: number) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -68,14 +116,19 @@ export const useUIStore = create<UIState>((set, get) => ({
   activeAccounts: [],
   selectedThreadId: null,
   selectedLabel: 'INBOX',
+  calendarViewMode: 'week',
   weekStartDay: 1,
   calendarWeekStart: getWeekStart(new Date(), 1),
+  calendarViewDate: todayISO(),
   notificationsEnabled: false,
   searchQuery: '',
   mailFilter: { unread: false, starred: false },
   autoMarkRead: false,
   showCompose: false,
   composeContext: null,
+  showEventModal: false,
+  eventModalDefaults: null,
+  activeReminders: [],
 
   setTheme: (theme) => {
     set({ theme })
@@ -112,7 +165,35 @@ export const useUIStore = create<UIState>((set, get) => ({
       const dd = String(date.getDate()).padStart(2, '0')
       return { calendarWeekStart: `${yyyy}-${mm}-${dd}` }
     }),
-  goToToday: () => set({ calendarWeekStart: getWeekStart(new Date(), get().weekStartDay) }),
+  navigateDay: (direction) =>
+    set((state) => {
+      const [y, m, d] = state.calendarViewDate.split('-').map(Number)
+      const date = new Date(y, m - 1, d + direction)
+      const yyyy = date.getFullYear()
+      const mm = String(date.getMonth() + 1).padStart(2, '0')
+      const dd = String(date.getDate()).padStart(2, '0')
+      return { calendarViewDate: `${yyyy}-${mm}-${dd}` }
+    }),
+  navigateMonth: (direction) =>
+    set((state) => {
+      const [y, m] = state.calendarViewDate.split('-').map(Number)
+      const date = new Date(y, m - 1 + direction, 1)
+      const yyyy = date.getFullYear()
+      const mm = String(date.getMonth() + 1).padStart(2, '0')
+      return { calendarViewDate: `${yyyy}-${mm}-01` }
+    }),
+  goToToday: () =>
+    set({
+      calendarWeekStart: getWeekStart(new Date(), get().weekStartDay),
+      calendarViewDate: todayISO(),
+    }),
+  setCalendarViewMode: (mode) => {
+    set({ calendarViewMode: mode })
+    invoke('save_calendar_view_mode', { mode }).catch((e: unknown) =>
+      console.warn('Failed to persist calendar view mode:', e),
+    )
+  },
+  setCalendarViewDate: (date) => set({ calendarViewDate: date }),
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   toggleMailFilter: (key) =>
@@ -131,6 +212,39 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   openCompose: (context) => set({ showCompose: true, composeContext: context }),
   closeCompose: () => set({ showCompose: false, composeContext: null }),
+  openEventModal: (defaults) => set({ showEventModal: true, eventModalDefaults: defaults ?? null }),
+  closeEventModal: () => set({ showEventModal: false, eventModalDefaults: null }),
+  addReminder: (payload) =>
+    set((state) => {
+      // Deduplicate by eventId
+      if (state.activeReminders.some((r) => r.eventId === payload.event_id)) {
+        return state
+      }
+      const reminder: ActiveReminder = {
+        eventId: payload.event_id,
+        title: payload.title,
+        start: payload.start,
+        calendarName: payload.calendar_name,
+        calendarColor: payload.calendar_color,
+        minutesUntil: payload.minutes_until,
+        receivedAt: Date.now(),
+      }
+      return { activeReminders: [...state.activeReminders, reminder] }
+    }),
+  dismissReminder: (eventId) =>
+    set((state) => ({
+      activeReminders: state.activeReminders.filter((r) => r.eventId !== eventId),
+    })),
+  snoozeReminder: (eventId, minutes) => {
+    // Remove from active list immediately
+    set((state) => ({
+      activeReminders: state.activeReminders.filter((r) => r.eventId !== eventId),
+    }))
+    // Tell backend to clear the dedup entry
+    invoke('snooze_reminder', { eventId, snoozeMinutes: minutes }).catch((e: unknown) =>
+      console.warn('Failed to snooze reminder:', e),
+    )
+  },
 }))
 
 /** Load the persisted theme from the backend store and apply it. */
@@ -184,5 +298,19 @@ export async function initMailFilter(): Promise<void> {
     useUIStore.setState({ mailFilter: { unread, starred } })
   } catch {
     // First launch or store unavailable — keep default (both false)
+  }
+}
+
+const VALID_VIEW_MODES: CalendarViewMode[] = ['day', 'week', 'month']
+
+/** Load the persisted calendar view mode from the backend store. */
+export async function initCalendarViewMode(): Promise<void> {
+  try {
+    const saved = await invoke<string>('load_calendar_view_mode')
+    if (VALID_VIEW_MODES.includes(saved as CalendarViewMode)) {
+      useUIStore.setState({ calendarViewMode: saved as CalendarViewMode })
+    }
+  } catch {
+    // First launch or store unavailable — keep default (week)
   }
 }

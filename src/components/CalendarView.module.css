@@ -268,6 +268,18 @@
   white-space: pre-line;
 }
 
+/* ── Selected half-hour slot ── */
+.selectedSlot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(79, 156, 249, 0.12);
+  border: 1px solid rgba(79, 156, 249, 0.35);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* ── Now line ── */
 .nowLine {
   position: absolute;
@@ -297,4 +309,59 @@
   justify-content: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+/* ── Drag & drop ── */
+
+.resizeHandleEvent {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  cursor: ns-resize;
+  border-radius: 0 0 4px 4px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.eventBlock:hover .resizeHandleEvent {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.eventBlockDragging {
+  opacity: 0.6;
+  border: 1px dashed currentColor;
+  cursor: grabbing;
+  z-index: 20 !important;
+  pointer-events: none;
+}
+
+/* Suppress hover popover on the event being dragged */
+.eventBlockDragging .eventPopover {
+  display: none !important;
+}
+
+/* During drag, prevent hover effects on other events */
+.containerDragging .eventBlock:not(.eventBlockDragging) {
+  pointer-events: none;
+}
+
+.containerDragging .hourRow {
+  pointer-events: none;
+}
+
+.dragTimeTooltip {
+  position: fixed;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 1000;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }

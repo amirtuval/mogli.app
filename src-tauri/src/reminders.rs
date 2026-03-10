@@ -3,11 +3,12 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use log::{error, info, warn};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::interval;
 
 use crate::google::calendar as calendar_api;
 use crate::google::oauth::OAuthCredentials;
+use crate::models::ReminderPayload;
 use crate::store::{self, AccountStore};
 
 const REMINDER_CHECK_SECS: u64 = 60;
@@ -23,6 +24,21 @@ impl NotifiedEvents {
     pub fn new() -> Self {
         Self {
             ids: Mutex::new(HashSet::new()),
+        }
+    }
+}
+
+/// Stores active reminder payloads so new windows can retrieve them on mount.
+/// The popup window loads asynchronously and may miss `calendar:reminder`
+/// events that were emitted before its JS listener was ready.
+pub struct ActiveReminders {
+    pub list: Mutex<Vec<ReminderPayload>>,
+}
+
+impl ActiveReminders {
+    pub fn new() -> Self {
+        Self {
+            list: Mutex::new(Vec::new()),
         }
     }
 }
@@ -144,31 +160,107 @@ async fn check_account_events(
                 continue;
             }
 
-            // Deduplicate
+            // Deduplicate by event ID + start time so rescheduled events re-trigger
+            let dedup_key = format!("{}::{}", event.id, event.start);
             let Ok(mut notified) = notified_state.ids.lock() else {
                 continue;
             };
-            if notified.contains(&event.id) {
+            if notified.contains(&dedup_key) {
                 continue;
             }
-            notified.insert(event.id.clone());
+            notified.insert(dedup_key);
             drop(notified);
 
             let minutes_until = (event.start - now) / 60;
-            let body = if minutes_until <= 0 {
-                format!("Starting now · {}", cal.name)
-            } else {
-                format!("Starting in {} min · {}", minutes_until, cal.name)
-            };
 
             info!(
                 "Calendar reminder: {} — {} (in {} min)",
                 event.title, cal.name, minutes_until
             );
 
-            if let Err(e) = crate::notify::send(&event.title, &body) {
-                error!("Failed to send calendar reminder notification: {e}");
+            // Emit to frontend for in-app reminder cards
+            let payload = ReminderPayload {
+                event_id: event.id.clone(),
+                title: event.title.clone(),
+                start: event.start,
+                calendar_name: cal.name.clone(),
+                calendar_color: cal.color.clone(),
+                minutes_until,
+            };
+
+            // Store in backend state so the popup window can fetch on mount
+            if let Ok(mut list) = app.state::<ActiveReminders>().list.lock()
+                && !list.iter().any(|r| r.event_id == event.id)
+            {
+                list.push(payload.clone());
             }
+
+            let _ = app.emit("calendar:reminder", payload);
+
+            // Open / focus the reminder popup window
+            show_reminder_window(app);
+        }
+    }
+}
+
+/// Open the always-on-top reminder popup window, or focus it if it already
+/// exists.  The window loads the same frontend entry-point; the React code
+/// detects the `reminder-popup` window label and renders the reminder UI.
+pub fn show_reminder_window(app: &AppHandle) {
+    use tauri::WebviewWindowBuilder;
+
+    const LABEL: &str = "reminder-popup";
+    const WIDTH: i32 = 380;
+    const HEIGHT: i32 = 360;
+
+    // If the window already exists, just show + focus it
+    if let Some(win) = app.webview_windows().get(LABEL) {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+        return;
+    }
+
+    let url = tauri::WebviewUrl::App("index.html".into());
+
+    match WebviewWindowBuilder::new(app, LABEL, url)
+        .title("Reminders")
+        .inner_size(f64::from(WIDTH), f64::from(HEIGHT))
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(true)
+        .focused(true)
+        .build()
+    {
+        Ok(win) => {
+            // Position at bottom-right of the primary monitor.
+            // Monitor size/position are physical pixels; convert to logical
+            // via scale_factor so the window doesn't overflow on high-DPI.
+            if let Ok(Some(monitor)) = win.primary_monitor() {
+                let scale = win.scale_factor().unwrap_or(1.0);
+                let phys_w = f64::from(monitor.size().width);
+                let phys_h = f64::from(monitor.size().height);
+                let phys_x = f64::from(monitor.position().x);
+                let phys_y = f64::from(monitor.position().y);
+
+                let mon_w = phys_w / scale;
+                let mon_h = phys_h / scale;
+                let mon_x = phys_x / scale;
+                let mon_y = phys_y / scale;
+
+                let margin = 20.0;
+                let x = mon_x + mon_w - f64::from(WIDTH) - margin;
+                let y = mon_y + mon_h - f64::from(HEIGHT) - margin - 40.0;
+                let _ =
+                    win.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
+            }
+        }
+        Err(e) => {
+            error!("Failed to create reminder popup window: {e}");
         }
     }
 }
@@ -210,17 +302,17 @@ mod tests {
     #[test]
     fn test_deduplication_with_hashset() {
         let notified = NotifiedEvents::new();
-        let event_id = "event-123".to_string();
+        let key = "event-123::1000300".to_string();
 
         {
             let mut ids = notified.ids.lock().unwrap();
-            assert!(!ids.contains(&event_id));
-            ids.insert(event_id.clone());
+            assert!(!ids.contains(&key));
+            ids.insert(key.clone());
         }
 
         {
             let ids = notified.ids.lock().unwrap();
-            assert!(ids.contains(&event_id));
+            assert!(ids.contains(&key));
         }
     }
 
@@ -229,12 +321,55 @@ mod tests {
         let notified = NotifiedEvents::new();
         let mut ids = notified.ids.lock().unwrap();
 
-        ids.insert("ev-1".to_string());
-        ids.insert("ev-2".to_string());
-        ids.insert("ev-1".to_string()); // duplicate
+        ids.insert("ev-1::1000".to_string());
+        ids.insert("ev-2::2000".to_string());
+        ids.insert("ev-1::1000".to_string()); // duplicate
 
         assert_eq!(ids.len(), 2);
-        assert!(ids.contains("ev-1"));
-        assert!(ids.contains("ev-2"));
+        assert!(ids.contains("ev-1::1000"));
+        assert!(ids.contains("ev-2::2000"));
+    }
+
+    #[test]
+    fn test_rescheduled_event_triggers_new_reminder() {
+        let notified = NotifiedEvents::new();
+
+        // First reminder at original start time
+        {
+            let mut ids = notified.ids.lock().unwrap();
+            ids.insert("ev-1::1000".to_string());
+        }
+
+        // Same event rescheduled to a later time — different key
+        let rescheduled_key = "ev-1::4600".to_string();
+        {
+            let ids = notified.ids.lock().unwrap();
+            assert!(!ids.contains(&rescheduled_key));
+        }
+    }
+
+    #[test]
+    fn test_snooze_clears_dedup_entry() {
+        let notified = NotifiedEvents::new();
+
+        // Simulate initial notification
+        {
+            let mut ids = notified.ids.lock().unwrap();
+            ids.insert("ev-snooze::5000".to_string());
+            ids.insert("ev-keep::6000".to_string());
+        }
+
+        // Simulate snooze: remove all entries for this event (matching prefix)
+        {
+            let mut ids = notified.ids.lock().unwrap();
+            ids.retain(|key| !key.starts_with("ev-snooze::"));
+        }
+
+        // Verify the snoozed event is gone but others remain
+        {
+            let ids = notified.ids.lock().unwrap();
+            assert!(!ids.contains("ev-snooze::5000"));
+            assert!(ids.contains("ev-keep::6000"));
+        }
     }
 }

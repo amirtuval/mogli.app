@@ -18,6 +18,7 @@ const CALENDAR_ENABLED_KEY: &str = "calendar_enabled";
 const WEEK_START_DAY_KEY: &str = "week_start_day";
 const AUTO_MARK_READ_KEY: &str = "auto_mark_read";
 const MAIL_FILTER_KEY: &str = "mail_filter";
+const CALENDAR_VIEW_MODE_KEY: &str = "calendar_view_mode";
 
 /// In-memory account state, synced to disk via tauri-plugin-store.
 pub struct AccountStore {
@@ -261,6 +262,28 @@ pub fn save_calendar_enabled(app: &AppHandle, key: &str, enabled: bool) -> Resul
     store.set(CALENDAR_ENABLED_KEY, value);
     store.save().map_err(|e| format!("Save error: {e}"))?;
 
+    Ok(())
+}
+
+/// Load the persisted calendar view mode. Returns `None` if not set.
+pub fn load_calendar_view_mode(app: &AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    Ok(store
+        .get(CALENDAR_VIEW_MODE_KEY)
+        .and_then(|v| v.as_str().map(String::from)))
+}
+
+/// Persist the calendar view mode to disk.
+pub fn save_calendar_view_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
+    let store = app
+        .store(STORE_FILENAME)
+        .map_err(|e| format!("Failed to open store: {e}"))?;
+
+    store.set(CALENDAR_VIEW_MODE_KEY, serde_json::json!(mode));
+    store.save().map_err(|e| format!("Save error: {e}"))?;
     Ok(())
 }
 

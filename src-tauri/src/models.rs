@@ -92,6 +92,17 @@ pub struct SendMessageRequest {
     pub references: Option<String>,
 }
 
+/// Payload emitted to the frontend when a calendar reminder fires.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ReminderPayload {
+    pub event_id: String,
+    pub title: String,
+    pub start: i64,
+    pub calendar_name: String,
+    pub calendar_color: String,
+    pub minutes_until: i64,
+}
+
 /// Ordered list of account colors assigned on add.
 pub const ACCOUNT_COLORS: &[&str] = &[
     "#4f9cf9", // blue
@@ -141,5 +152,25 @@ mod tests {
         assert_eq!(parsed.id, "test-id");
         assert_eq!(parsed.email, "user@example.com");
         assert_eq!(parsed.color, "#4f9cf9");
+    }
+
+    #[test]
+    fn test_reminder_payload_roundtrip() {
+        let payload = ReminderPayload {
+            event_id: "ev-123".to_string(),
+            title: "Team Standup".to_string(),
+            start: 1_772_000_000,
+            calendar_name: "Work".to_string(),
+            calendar_color: "#4f9cf9".to_string(),
+            minutes_until: 5,
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        let parsed: ReminderPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.event_id, "ev-123");
+        assert_eq!(parsed.title, "Team Standup");
+        assert_eq!(parsed.start, 1_772_000_000);
+        assert_eq!(parsed.calendar_name, "Work");
+        assert_eq!(parsed.calendar_color, "#4f9cf9");
+        assert_eq!(parsed.minutes_until, 5);
     }
 }

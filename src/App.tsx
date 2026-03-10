@@ -10,6 +10,7 @@ import {
   initNotifications,
   initAutoMarkRead,
   initMailFilter,
+  initCalendarViewMode,
 } from './store/uiStore'
 import { applyTheme } from './styles/theme'
 import { useAccounts } from './hooks/useAccounts'
@@ -22,8 +23,11 @@ import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
 import MailView from './components/MailView'
 import CalendarView from './components/CalendarView'
+import MonthView from './components/MonthView'
 import NotificationBanner from './components/NotificationBanner'
 import ComposeModal from './components/ComposeModal'
+import EventModal from './components/EventModal'
+import type { ReminderPayload } from './types/models'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,9 +44,13 @@ function AppShell() {
   const activeAccounts = useUIStore((s) => s.activeAccounts)
   const selectedLabel = useUIStore((s) => s.selectedLabel)
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
+  const calendarViewMode = useUIStore((s) => s.calendarViewMode)
+  const calendarViewDate = useUIStore((s) => s.calendarViewDate)
+  const weekStartDay = useUIStore((s) => s.weekStartDay)
   const setActiveAccounts = useUIStore((s) => s.setActiveAccounts)
   const searchQuery = useUIStore((s) => s.searchQuery)
   const showCompose = useUIStore((s) => s.showCompose)
+  const showEventModal = useUIStore((s) => s.showEventModal)
 
   const { data: accounts = [] } = useAccounts()
   const { data: messages, isLoading: messagesLoading } = useMessages(activeAccounts, selectedLabel)
@@ -64,12 +72,19 @@ function AppShell() {
     [calendars],
   )
 
-  // Fetch events for the current week
+  // Fetch events for the current view period
   const {
     data: events,
     isLoading: eventsLoading,
     isFetching: eventsFetching,
-  } = useEvents(activeAccounts, enabledCalendarIds, calendarWeekStart)
+  } = useEvents(
+    activeAccounts,
+    enabledCalendarIds,
+    calendarWeekStart,
+    calendarViewMode,
+    calendarViewDate,
+    weekStartDay,
+  )
 
   // Apply theme CSS vars whenever theme changes
   useEffect(() => {
@@ -93,16 +108,26 @@ function AppShell() {
     }
   }, [])
 
-  // Listen for notification:open_thread events to navigate to a specific thread
+  // Listen for notification:open_thread events to pre-select a thread.
+  // Don't switch the active view — the event fires for every new message
+  // during background sync, not only when the user clicks a notification.
   useEffect(() => {
     const unlisten = listen<{ thread_id: string; account_id: string }>(
       'notification:open_thread',
       (event) => {
-        const { thread_id } = event.payload
-        useUIStore.getState().setActiveView('mail')
-        useUIStore.getState().setSelectedThreadId(thread_id)
+        useUIStore.getState().setSelectedThreadId(event.payload.thread_id)
       },
     )
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
+  // Listen for calendar reminder events from the background reminder checker
+  useEffect(() => {
+    const unlisten = listen<ReminderPayload>('calendar:reminder', (event) => {
+      useUIStore.getState().addReminder(event.payload)
+    })
     return () => {
       unlisten.then((fn) => fn())
     }
@@ -168,7 +193,15 @@ function AppShell() {
             isLoading={activeMessagesLoading}
           />
         )}
-        {activeView === 'calendar' && (
+        {activeView === 'calendar' && calendarViewMode === 'month' && (
+          <MonthView
+            events={events}
+            calendars={calendars}
+            accounts={accounts}
+            isFetching={eventsFetching}
+          />
+        )}
+        {activeView === 'calendar' && calendarViewMode !== 'month' && (
           <CalendarView
             events={events}
             calendars={calendars}
@@ -179,6 +212,15 @@ function AppShell() {
         )}
       </main>
       {showCompose && <ComposeModal accounts={accounts} />}
+      {showEventModal && (
+        <EventModal
+          accounts={accounts}
+          calendars={calendars}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['events'] })
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -193,6 +235,7 @@ function App() {
     initNotifications()
     initAutoMarkRead()
     initMailFilter()
+    initCalendarViewMode()
   }, [])
 
   return (

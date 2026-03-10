@@ -24,6 +24,7 @@ export default function MiniCal() {
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
   const weekStartDay = useUIStore((s) => s.weekStartDay)
   const setCalendarWeekStart = useUIStore((s) => s.setCalendarWeekStart)
+  const setCalendarViewDate = useUIStore((s) => s.setCalendarViewDate)
 
   const dayHeaders = weekStartDay === 0 ? DAY_HEADERS_SUN : DAY_HEADERS_MON
 
@@ -78,8 +79,12 @@ export default function MiniCal() {
     (day: number) => {
       const clicked = new Date(displayYear, displayMonth, day)
       setCalendarWeekStart(getWeekStart(clicked, weekStartDay))
+      const yyyy = clicked.getFullYear()
+      const mm = String(clicked.getMonth() + 1).padStart(2, '0')
+      const dd = String(clicked.getDate()).padStart(2, '0')
+      setCalendarViewDate(`${yyyy}-${mm}-${dd}`)
     },
-    [displayYear, displayMonth, setCalendarWeekStart, weekStartDay],
+    [displayYear, displayMonth, setCalendarWeekStart, setCalendarViewDate, weekStartDay],
   )
 
   const isToday = (day: number) =>

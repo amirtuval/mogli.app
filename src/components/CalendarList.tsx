@@ -93,15 +93,6 @@ export default function CalendarList({ accounts, calendars }: CalendarListProps)
           )
         })}
       </div>
-
-      {/* View picker: Week only (Day/Month not yet implemented) */}
-      <div className={styles.viewSection}>
-        <div className={styles.sectionLabel}>View</div>
-        <div className={styles.viewItem}>
-          <span className={styles.viewIcon}>▦</span>
-          Week
-        </div>
-      </div>
     </>
   )
 }
