@@ -11,12 +11,23 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: ''
+          - os: macos-latest
+            target: ''
+          - os: windows-latest
+            target: ''
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,3 +48,4 @@ jobs:
           releaseName: 'Mogly ${{ github.ref_name }}'
           releaseBody: 'See CHANGELOG for details.'
           updaterJsonPreferNsis: true
+          args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
