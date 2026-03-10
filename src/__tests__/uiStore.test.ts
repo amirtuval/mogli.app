@@ -10,7 +10,9 @@ describe('uiStore', () => {
       activeAccounts: [],
       selectedThreadId: null,
       selectedLabel: 'INBOX',
+      calendarViewMode: 'week',
       calendarWeekStart: '2026-03-02',
+      calendarViewDate: '2026-03-02',
       weekStartDay: 1,
       notificationsEnabled: false,
       searchQuery: '',
@@ -205,6 +207,60 @@ describe('uiStore', () => {
     const state = useUIStore.getState()
     expect(state.showCompose).toBe(false)
     expect(state.composeContext).toBeNull()
+  })
+})
+
+describe('calendar view mode', () => {
+  beforeEach(() => {
+    useUIStore.setState({
+      calendarViewMode: 'week',
+      calendarViewDate: '2026-03-10',
+      calendarWeekStart: '2026-03-09',
+    })
+  })
+
+  it('should set calendar view mode', () => {
+    useUIStore.getState().setCalendarViewMode('day')
+    expect(useUIStore.getState().calendarViewMode).toBe('day')
+    useUIStore.getState().setCalendarViewMode('month')
+    expect(useUIStore.getState().calendarViewMode).toBe('month')
+  })
+
+  it('should navigate day forward', () => {
+    useUIStore.getState().navigateDay(1)
+    expect(useUIStore.getState().calendarViewDate).toBe('2026-03-11')
+  })
+
+  it('should navigate day backward', () => {
+    useUIStore.getState().navigateDay(-1)
+    expect(useUIStore.getState().calendarViewDate).toBe('2026-03-09')
+  })
+
+  it('should navigate day across month boundary', () => {
+    useUIStore.setState({ calendarViewDate: '2026-03-31' })
+    useUIStore.getState().navigateDay(1)
+    expect(useUIStore.getState().calendarViewDate).toBe('2026-04-01')
+  })
+
+  it('should navigate month forward', () => {
+    useUIStore.getState().navigateMonth(1)
+    expect(useUIStore.getState().calendarViewDate).toBe('2026-04-01')
+  })
+
+  it('should navigate month backward', () => {
+    useUIStore.getState().navigateMonth(-1)
+    expect(useUIStore.getState().calendarViewDate).toBe('2026-02-01')
+  })
+
+  it('should navigate month across year boundary', () => {
+    useUIStore.setState({ calendarViewDate: '2026-01-15' })
+    useUIStore.getState().navigateMonth(-1)
+    expect(useUIStore.getState().calendarViewDate).toBe('2025-12-01')
+  })
+
+  it('should set calendar view date', () => {
+    useUIStore.getState().setCalendarViewDate('2026-06-15')
+    expect(useUIStore.getState().calendarViewDate).toBe('2026-06-15')
   })
 })
 

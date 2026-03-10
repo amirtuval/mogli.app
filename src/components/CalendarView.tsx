@@ -9,6 +9,8 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i) // 00:00–23:00
 const ROW_HEIGHT = 56
 const SNAP_MINUTES = 15
 const MIN_DURATION_MINUTES = 15
+/** Minimum pixel distance before a mouseDown is treated as a drag vs a click. */
+const DRAG_THRESHOLD = 4
 
 interface CalendarViewProps {
   events: CalEvent[] | undefined
@@ -160,19 +162,27 @@ export default function CalendarView({
 }: CalendarViewProps) {
   const theme = useUIStore((s) => s.theme)
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
+  const calendarViewMode = useUIStore((s) => s.calendarViewMode)
+  const calendarViewDate = useUIStore((s) => s.calendarViewDate)
   const openEventModal = useUIStore((s) => s.openEventModal)
   const isLight = theme === 'light'
   const queryClient = useQueryClient()
 
-  // Week days (Mon–Sun) as Date objects
+  const isDayMode = calendarViewMode === 'day'
+  const dayCount = isDayMode ? 1 : 7
+
+  // Day(s) to display as Date objects
   const weekDays = useMemo(() => {
+    if (isDayMode) {
+      return [new Date(calendarViewDate + 'T00:00:00')]
+    }
     const start = new Date(calendarWeekStart + 'T00:00:00')
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(start)
       d.setDate(start.getDate() + i)
       return d
     })
-  }, [calendarWeekStart])
+  }, [calendarWeekStart, calendarViewDate, isDayMode])
 
   const today = useMemo(() => {
     const now = new Date()
@@ -204,6 +214,13 @@ export default function CalendarView({
   // Track whether a drag actually moved (to suppress click-to-create)
   const didDragRef = useRef(false)
 
+  // ── Selected half-hour slot highlight ──
+  const [selectedSlot, setSelectedSlot] = useState<{
+    dayIndex: number
+    /** Start minute of the selected 30-min block */
+    startMin: number
+  } | null>(null)
+
   /** Convert clientY relative to an hour grid into snapped minutes-since-midnight. */
   const clientYToMinutes = useCallback((clientY: number, dayIdx: number): number => {
     const grid = hourGridRefs.current[dayIdx]
@@ -225,14 +242,51 @@ export default function CalendarView({
     // Fallback: clamp to edges
     const first = dayColumnRefs.current[0]
     if (first && clientX < first.getBoundingClientRect().left) return 0
-    return 6
-  }, [])
+    return dayCount - 1
+  }, [dayCount])
 
-  /** Start a move or resize drag. */
+  /** Open the event modal in edit mode for an existing event. */
+  const openEditModal = useCallback(
+    (ev: CalEvent) => {
+      const startDate = new Date(ev.start * 1000)
+      const endDate = new Date(ev.end * 1000)
+      const dateStr = `${startDate.getFullYear()}-${pad2(startDate.getMonth() + 1)}-${pad2(startDate.getDate())}`
+      const startTimeStr = `${pad2(startDate.getHours())}:${pad2(startDate.getMinutes())}`
+      const endTimeStr = `${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`
+
+      openEventModal({
+        mode: 'edit',
+        date: dateStr,
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+        eventId: ev.id,
+        accountId: ev.account_id,
+        calendarId: ev.calendar_id,
+        title: ev.title,
+        allDay: ev.all_day || ev.end - ev.start >= 86400,
+        location: ev.location ?? undefined,
+        description: ev.description ?? undefined,
+        recurrence: 'none',
+        reminders: [],
+      })
+    },
+    [openEventModal],
+  )
+
+  /**
+   * Start a potential drag. The actual drag mode is deferred until the mouse
+   * moves more than DRAG_THRESHOLD pixels, so a simple click (mouseDown →
+   * mouseUp without significant movement) opens the edit modal instead.
+   */
   const startDrag = useCallback(
     (type: 'move' | 'resize', ev: CalEvent, dayIndex: number, e: React.MouseEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      setSelectedSlot(null)
+
+      const originX = e.clientX
+      const originY = e.clientY
+      let dragActivated = false
 
       const startDate = new Date(ev.start * 1000)
       const endDate = new Date(ev.end * 1000)
@@ -251,11 +305,22 @@ export default function CalendarView({
         originalDayIndex: dayIndex,
       }
 
-      dragRef.current = initial
-      setDragState(initial)
-      didDragRef.current = false
+      const activateDrag = () => {
+        dragActivated = true
+        didDragRef.current = true
+        dragRef.current = initial
+        setDragState(initial)
+      }
 
       const onMouseMove = (moveEvt: MouseEvent) => {
+        // Check threshold before entering drag mode
+        if (!dragActivated) {
+          const dx = moveEvt.clientX - originX
+          const dy = moveEvt.clientY - originY
+          if (dx * dx + dy * dy < DRAG_THRESHOLD * DRAG_THRESHOLD) return
+          activateDrag()
+        }
+
         const prev = dragRef.current
         if (!prev) return
 
@@ -263,7 +328,6 @@ export default function CalendarView({
           const newEnd = clientYToMinutes(moveEvt.clientY, prev.dayIndex)
           const clampedEnd = Math.max(prev.currentStartMin + MIN_DURATION_MINUTES, newEnd)
           if (clampedEnd !== prev.currentEndMin) {
-            didDragRef.current = true
             const next = { ...prev, currentEndMin: clampedEnd }
             dragRef.current = next
             setDragState(next)
@@ -279,7 +343,6 @@ export default function CalendarView({
           )
           const newEnd = newStart + duration
           if (newStart !== prev.currentStartMin || newDayIndex !== prev.dayIndex) {
-            didDragRef.current = true
             const next = {
               ...prev,
               currentStartMin: newStart,
@@ -297,11 +360,20 @@ export default function CalendarView({
         document.removeEventListener('mouseup', onMouseUp)
         document.removeEventListener('keydown', onKeyDown)
 
+        if (!dragActivated) {
+          // Mouse released without exceeding threshold → treat as click
+          didDragRef.current = false
+          // Resize handle clicks should not open the modal
+          if (type === 'move') openEditModal(ev)
+          return
+        }
+
         const final = dragRef.current
         dragRef.current = null
         setDragState(null)
+        didDragRef.current = false
 
-        if (!final || !didDragRef.current) return
+        if (!final) return
 
         // Check if position actually changed
         const changed =
@@ -332,7 +404,7 @@ export default function CalendarView({
           if (!data) return
           previousCaches.push({ key, data })
           queryClient.setQueryData<CalEvent[]>(key, (old) =>
-            old?.map((e) => (e.id === final.event.id ? { ...e, start: newStart, end: newEnd } : e)),
+            old?.map((x) => (x.id === final.event.id ? { ...x, start: newStart, end: newEnd } : x)),
           )
         })
 
@@ -374,14 +446,14 @@ export default function CalendarView({
       document.addEventListener('mouseup', onMouseUp)
       document.addEventListener('keydown', onKeyDown)
     },
-    [clientXToDayIndex, clientYToMinutes, queryClient, weekDays],
+    [clientXToDayIndex, clientYToMinutes, openEditModal, queryClient, weekDays],
   )
 
   // Group events by day, computing overlap layout for timed events
   const eventsByDay = useMemo(() => {
     const map = new Map<number, { timed: LayoutEvent[]; allDay: CalEvent[] }>()
     const timedByDay = new Map<number, CalEvent[]>()
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < dayCount; i++) {
       map.set(i, { timed: [], allDay: [] })
       timedByDay.set(i, [])
     }
@@ -395,7 +467,7 @@ export default function CalendarView({
 
       // Find which day column(s) this event belongs to
       const startDate = new Date(event.start * 1000)
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < dayCount; i++) {
         const day = weekDays[i]
         if (
           startDate.getFullYear() === day.getFullYear() &&
@@ -412,12 +484,12 @@ export default function CalendarView({
     }
 
     // Compute overlap layout per day
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < dayCount; i++) {
       map.get(i)!.timed = computeOverlapLayout(timedByDay.get(i)!)
     }
 
     return map
-  }, [events, weekDays])
+  }, [events, weekDays, dayCount])
 
   // Auto-scroll to 7 AM on mount
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -481,10 +553,14 @@ export default function CalendarView({
     const startStr = formatMinutes(startMinutes)
     const endStr = formatMinutes(endMinutes)
 
-    // Side-by-side: divide the column width evenly, expand by span
+    // Side-by-side: divide the column width evenly, expand by span.
+    // Leave a right margin on the last visible column so the hour grid
+    // underneath remains clickable for creating new events (à la Google Cal).
     const colWidth = 100 / totalColumns
     const leftPercent = column * colWidth
-    const widthPercent = colWidth * span
+    const isLastColumn = column + span >= totalColumns
+    const rightInsetPct = isLastColumn ? 15 : 0
+    const widthPercent = colWidth * span - rightInsetPct
 
     const cal = calendars.find((c) => c.id === ev.calendar_id)
     const acct = accounts.find((a) => a.id === ev.account_id)
@@ -603,6 +679,7 @@ export default function CalendarView({
                           borderLeft: `2.5px solid ${color}`,
                           color,
                         }}
+                        onClick={() => openEditModal(ev)}
                       >
                         {ev.title}
 
@@ -682,23 +759,39 @@ export default function CalendarView({
                     className={styles.hourRow}
                     style={{ cursor: isDragging ? 'default' : 'crosshair' }}
                     onClick={(e) => {
-                      // Suppress click-to-create during/after drag
                       if (isDragging || didDragRef.current) {
                         didDragRef.current = false
                         return
                       }
                       const rect = e.currentTarget.getBoundingClientRect()
                       const offsetY = e.clientY - rect.top
-                      const quarterSlot = Math.floor((offsetY / ROW_HEIGHT) * 4)
-                      const minutes = Math.min(quarterSlot * 15, 45)
-                      const startH = h
-                      const startM = minutes
-                      const endH = (startH + 1) % 24
+                      // Snap to 30-min boundary
+                      const halfSlot = Math.floor((offsetY / ROW_HEIGHT) * 2)
+                      const slotMin = h * 60 + halfSlot * 30
+                      setSelectedSlot({ dayIndex: di, startMin: slotMin })
+                    }}
+                    onDoubleClick={(e) => {
+                      // Suppress during/after drag
+                      if (isDragging || didDragRef.current) {
+                        didDragRef.current = false
+                        return
+                      }
+                      setSelectedSlot(null)
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const offsetY = e.clientY - rect.top
+                      const halfSlot = Math.floor((offsetY / ROW_HEIGHT) * 2)
+                      const startMin = h * 60 + halfSlot * 30
+                      const endMin = startMin + 30
+                      const startH = Math.floor(startMin / 60)
+                      const startM = startMin % 60
+                      const endH = Math.floor(endMin / 60) % 24
+                      const endM = endMin % 60
                       const dateStr = `${day.getFullYear()}-${pad2(day.getMonth() + 1)}-${pad2(day.getDate())}`
                       openEventModal({
+                        mode: 'create',
                         date: dateStr,
                         startTime: `${pad2(startH)}:${pad2(startM)}`,
-                        endTime: `${pad2(endH)}:${pad2(startM)}`,
+                        endTime: `${pad2(endH)}:${pad2(endM)}`,
                       })
                     }}
                   />
@@ -744,6 +837,17 @@ export default function CalendarView({
                     dragState.currentStartMin,
                     dragState.currentEndMin,
                   )}
+
+                {/* Selected half-hour slot highlight */}
+                {selectedSlot && selectedSlot.dayIndex === di && (
+                  <div
+                    className={styles.selectedSlot}
+                    style={{
+                      top: (selectedSlot.startMin / 60) * ROW_HEIGHT,
+                      height: (30 / 60) * ROW_HEIGHT,
+                    }}
+                  />
+                )}
 
                 {/* Now line — only on today's column */}
                 {isTodayCol && (

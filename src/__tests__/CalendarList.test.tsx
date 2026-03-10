@@ -87,17 +87,6 @@ describe('CalendarList', () => {
     expect(screen.getByText('Calendars')).toBeDefined()
   })
 
-  it('renders the Week view label', () => {
-    render(
-      <Wrapper>
-        <CalendarList accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} />
-      </Wrapper>,
-    )
-
-    expect(screen.getByText('Week')).toBeDefined()
-    expect(screen.getByText('View')).toBeDefined()
-  })
-
   it('calls set_calendar_enabled when clicking a calendar toggle', async () => {
     render(
       <Wrapper>

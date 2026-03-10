@@ -167,7 +167,7 @@
   border-radius: 4px;
   padding: 4px 7px;
   overflow: hidden;
-  cursor: grab;
+  cursor: pointer;
   transition: opacity 0.1s;
   box-sizing: border-box;
 }
@@ -266,6 +266,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: pre-line;
+}
+
+/* ── Selected half-hour slot ── */
+.selectedSlot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(79, 156, 249, 0.12);
+  border: 1px solid rgba(79, 156, 249, 0.35);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* ── Now line ── */

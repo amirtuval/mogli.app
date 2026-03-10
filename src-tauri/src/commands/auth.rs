@@ -112,3 +112,17 @@ pub async fn load_mail_filter(app: AppHandle) -> Result<(bool, bool), String> {
 pub async fn save_mail_filter(app: AppHandle, unread: bool, starred: bool) -> Result<(), String> {
     store::save_mail_filter(&app, unread, starred)
 }
+
+/// Load the persisted calendar view mode. Returns `"week"` if not set.
+#[tauri::command]
+#[specta::specta]
+pub async fn load_calendar_view_mode(app: AppHandle) -> Result<String, String> {
+    Ok(store::load_calendar_view_mode(&app)?.unwrap_or_else(|| "week".to_string()))
+}
+
+/// Persist the calendar view mode to disk.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_calendar_view_mode(app: AppHandle, mode: String) -> Result<(), String> {
+    store::save_calendar_view_mode(&app, &mode)
+}

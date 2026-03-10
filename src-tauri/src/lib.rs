@@ -23,7 +23,7 @@ mod reminders;
 mod store;
 mod sync;
 
-use reminders::NotifiedEvents;
+use reminders::{ActiveReminders, NotifiedEvents};
 use store::AccountStore;
 use tauri::Manager;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -44,6 +44,8 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::auth::save_auto_mark_read,
         commands::auth::load_mail_filter,
         commands::auth::save_mail_filter,
+        commands::auth::load_calendar_view_mode,
+        commands::auth::save_calendar_view_mode,
         commands::gmail::get_account_messages,
         commands::gmail::get_messages,
         commands::gmail::get_thread,
@@ -59,8 +61,10 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::calendar::get_events,
         commands::calendar::create_event,
         commands::calendar::update_event,
+        commands::calendar::delete_event,
         commands::calendar::dismiss_reminder,
         commands::calendar::snooze_reminder,
+        commands::calendar::get_active_reminders,
         commands::notification::is_notification_granted,
         commands::notification::request_notification_permission,
         commands::notification::set_tray_badge,
@@ -146,6 +150,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(AccountStore::new())
         .manage(NotifiedEvents::new())
+        .manage(ActiveReminders::new())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

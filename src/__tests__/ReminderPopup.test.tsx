@@ -80,6 +80,7 @@ describe('ReminderPopup', () => {
     expect(screen.getByText('10 min')).toBeInTheDocument()
     expect(screen.getByText('15 min')).toBeInTheDocument()
     expect(screen.getByText('30 min')).toBeInTheDocument()
+    expect(screen.getByText('1 hour')).toBeInTheDocument()
 
     await user.click(screen.getByText('10 min'))
 

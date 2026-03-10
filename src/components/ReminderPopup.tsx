@@ -8,10 +8,8 @@ const SNOOZE_OPTIONS = [
   { label: '10 min', minutes: 10 },
   { label: '15 min', minutes: 15 },
   { label: '30 min', minutes: 30 },
+  { label: '1 hour', minutes: 60 },
 ] as const
-
-/** Auto-dismiss reminders after 30 minutes. */
-const AUTO_DISMISS_MS = 30 * 60 * 1000
 
 /**
  * Format the time until the event starts relative to now.
@@ -38,20 +36,6 @@ export default function ReminderPopup() {
     const interval = setInterval(() => setTick((t) => t + 1), 30_000)
     return () => clearInterval(interval)
   }, [reminders.length])
-
-  // Auto-dismiss old reminders
-  useEffect(() => {
-    if (reminders.length === 0) return
-    const timer = setInterval(() => {
-      const now = Date.now()
-      for (const r of reminders) {
-        if (now - r.receivedAt > AUTO_DISMISS_MS) {
-          dismissReminder(r.eventId)
-        }
-      }
-    }, 60_000)
-    return () => clearInterval(timer)
-  }, [reminders, dismissReminder])
 
   const [openSnoozeId, setOpenSnoozeId] = useState<string | null>(null)
 

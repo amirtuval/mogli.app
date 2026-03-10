@@ -162,26 +162,26 @@
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   z-index: 10;
-  max-height: 200px;
+  max-height: 300px;
   overflow-y: auto;
 }
 
 .calendarGroupLabel {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 6px 10px 2px;
+  padding: 8px 12px 3px;
 }
 
 .calendarOption {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-primary);
   border: none;
   background: none;
@@ -214,6 +214,75 @@
   margin: 0;
 }
 
+/* ── Reminders ── */
+
+.reminderList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reminderRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reminderRow select,
+.reminderRow input {
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.reminderRow select:focus,
+.reminderRow input:focus {
+  border-color: #4f9cf9;
+}
+
+.reminderRow input[type='number'] {
+  width: 60px;
+}
+
+.removeReminderBtn {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.removeReminderBtn:hover {
+  color: #f43f5e;
+  background: var(--bg-hover);
+}
+
+.addReminderBtn {
+  background: none;
+  border: none;
+  color: #4f9cf9;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+  font-family: inherit;
+}
+
+.addReminderBtn:hover {
+  text-decoration: underline;
+}
+
+/* ── Footer ── */
+
 .footer {
   display: flex;
   align-items: center;
@@ -221,6 +290,28 @@
   gap: 8px;
   padding: 12px 18px;
   border-top: 1px solid var(--border);
+}
+
+.deleteBtn {
+  border: 1px solid #f43f5e;
+  background: transparent;
+  color: #f43f5e;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  margin-right: auto;
+}
+
+.deleteBtn:hover {
+  background: #f43f5e;
+  color: #fff;
+}
+
+.deleteBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .discardBtn {

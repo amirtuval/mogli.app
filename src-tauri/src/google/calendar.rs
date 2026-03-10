@@ -167,11 +167,23 @@ pub async fn create_event(
     timezone: &str,
     location: Option<&str>,
     description: Option<&str>,
+    recurrence: Option<&[String]>,
+    reminder_minutes: Option<&[i32]>,
 ) -> Result<CalEvent, String> {
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
 
-    let body = build_event_body(title, start, end, all_day, timezone, location, description);
+    let body = build_event_body(
+        title,
+        start,
+        end,
+        all_day,
+        timezone,
+        location,
+        description,
+        recurrence,
+        reminder_minutes,
+    );
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events");
 
@@ -212,11 +224,23 @@ pub async fn update_event(
     timezone: &str,
     location: Option<&str>,
     description: Option<&str>,
+    recurrence: Option<&[String]>,
+    reminder_minutes: Option<&[i32]>,
 ) -> Result<CalEvent, String> {
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
 
-    let body = build_event_body(title, start, end, all_day, timezone, location, description);
+    let body = build_event_body(
+        title,
+        start,
+        end,
+        all_day,
+        timezone,
+        location,
+        description,
+        recurrence,
+        reminder_minutes,
+    );
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let encoded_event_id = urlencoding::encode(event_id);
     let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events/{encoded_event_id}");
@@ -245,6 +269,37 @@ pub async fn update_event(
         .ok_or_else(|| "Updated event missing required fields".to_string())
 }
 
+/// Delete an event from a Google Calendar via `events.delete`.
+pub async fn delete_event(
+    creds: &OAuthCredentials,
+    email: &str,
+    calendar_id: &str,
+    event_id: &str,
+) -> Result<(), String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let encoded_cal_id = urlencoding::encode(calendar_id);
+    let encoded_event_id = urlencoding::encode(event_id);
+    let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events/{encoded_event_id}");
+
+    let resp = client
+        .delete(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Delete event request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "events.delete failed for {calendar_id}/{event_id}: {text}"
+        ));
+    }
+
+    Ok(())
+}
+
 // --- Request body types ---
 
 #[derive(Debug, Serialize)]
@@ -257,6 +312,24 @@ struct EventBody {
     location: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recurrence: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reminders: Option<EventRemindersBody>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventRemindersBody {
+    use_default: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    overrides: Option<Vec<ReminderOverride>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ReminderOverride {
+    method: String,
+    minutes: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -272,6 +345,7 @@ struct EventDateTimeBody {
 
 // --- Helpers ---
 
+#[allow(clippy::too_many_arguments)]
 fn build_event_body(
     title: &str,
     start: i64,
@@ -280,6 +354,8 @@ fn build_event_body(
     timezone: &str,
     location: Option<&str>,
     description: Option<&str>,
+    recurrence: Option<&[String]>,
+    reminder_minutes: Option<&[i32]>,
 ) -> EventBody {
     let (start_body, end_body) = if all_day {
         let start_date = timestamp_to_date_string(start);
@@ -311,12 +387,35 @@ fn build_event_body(
         )
     };
 
+    let reminders = reminder_minutes.map(|mins| {
+        if mins.is_empty() {
+            EventRemindersBody {
+                use_default: true,
+                overrides: None,
+            }
+        } else {
+            EventRemindersBody {
+                use_default: false,
+                overrides: Some(
+                    mins.iter()
+                        .map(|&m| ReminderOverride {
+                            method: "popup".to_string(),
+                            minutes: m,
+                        })
+                        .collect(),
+                ),
+            }
+        }
+    });
+
     EventBody {
         summary: title.to_string(),
         start: start_body,
         end: end_body,
         location: location.map(String::from),
         description: description.map(String::from),
+        recurrence: recurrence.map(<[String]>::to_vec),
+        reminders,
     }
 }
 
@@ -662,6 +761,8 @@ mod tests {
             "America/New_York",
             Some("Room A"),
             None,
+            None,
+            None,
         );
 
         let json: serde_json::Value = serde_json::to_value(&body).unwrap();
@@ -698,6 +799,8 @@ mod tests {
             "UTC",
             None,
             Some("Day off"),
+            None,
+            None,
         );
 
         let json: serde_json::Value = serde_json::to_value(&body).unwrap();

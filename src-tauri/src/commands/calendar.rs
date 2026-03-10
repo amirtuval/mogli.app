@@ -1,9 +1,10 @@
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::google::calendar as calendar_api;
 use crate::google::oauth::OAuthCredentials;
 use crate::models::{CalEvent, Calendar};
-use crate::reminders::NotifiedEvents;
+use crate::models::ReminderPayload;
+use crate::reminders::{ActiveReminders, NotifiedEvents};
 use crate::store;
 
 /// List all calendars for an account. Merges enabled state from store.
@@ -146,8 +147,7 @@ pub async fn create_event(
     end: i64,
     all_day: bool,
     timezone: String,
-    location: Option<String>,
-    description: Option<String>,
+    rest: CreateEventOptionals,
 ) -> Result<CalEvent, String> {
     let creds = OAuthCredentials::load()?;
     let email = store::account_email(&app, &account_id)?;
@@ -161,8 +161,10 @@ pub async fn create_event(
         end,
         all_day,
         &timezone,
-        location.as_deref(),
-        description.as_deref(),
+        rest.location.as_deref(),
+        rest.description.as_deref(),
+        rest.recurrence.as_deref(),
+        rest.reminder_minutes.as_deref(),
     )
     .await
 }
@@ -200,8 +202,33 @@ pub async fn update_event(
         &timezone,
         rest.location.as_deref(),
         rest.description.as_deref(),
+        rest.recurrence.as_deref(),
+        rest.reminder_minutes.as_deref(),
     )
     .await
+}
+
+/// Delete a calendar event via Google Calendar API.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_event(
+    app: AppHandle,
+    account_id: String,
+    calendar_id: String,
+    event_id: String,
+) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let email = store::account_email(&app, &account_id)?;
+    calendar_api::delete_event(&creds, &email, &calendar_id, &event_id).await
+}
+
+/// Optional fields for `create_event`, bundled to stay within specta's 10-param limit.
+#[derive(Debug, serde::Deserialize, specta::Type)]
+pub struct CreateEventOptionals {
+    pub location: Option<String>,
+    pub description: Option<String>,
+    pub recurrence: Option<Vec<String>>,
+    pub reminder_minutes: Option<Vec<i32>>,
 }
 
 /// Optional fields for `update_event`, bundled to stay within specta's 10-param limit.
@@ -209,20 +236,39 @@ pub async fn update_event(
 pub struct UpdateEventOptionals {
     pub location: Option<String>,
     pub description: Option<String>,
+    pub recurrence: Option<Vec<String>>,
+    pub reminder_minutes: Option<Vec<i32>>,
 }
 
-/// Dismiss a calendar reminder (frontend handles state; backend just logs).
+/// Return all currently-active reminder payloads.
+/// The popup window calls this on mount to retrieve reminders it may have
+/// missed (its JS listener wasn't ready when the events were emitted).
 #[tauri::command]
 #[specta::specta]
-pub async fn dismiss_reminder(event_id: String) -> Result<(), String> {
+pub async fn get_active_reminders(app: AppHandle) -> Result<Vec<ReminderPayload>, String> {
+    let state = app.state::<ActiveReminders>();
+    let list = state.list.lock().map_err(|e| format!("Lock error: {e}"))?;
+    Ok(list.clone())
+}
+
+/// Dismiss a calendar reminder: remove from backend active list and log.
+#[tauri::command]
+#[specta::specta]
+pub async fn dismiss_reminder(app: AppHandle, event_id: String) -> Result<(), String> {
     log::info!("Reminder dismissed: {event_id}");
+    if let Ok(mut list) = app.state::<ActiveReminders>().list.lock() {
+        list.retain(|r| r.event_id != event_id);
+    }
     Ok(())
 }
 
-/// Snooze a calendar reminder by clearing its dedup entry so it can re-trigger.
+/// Snooze a calendar reminder.
 ///
-/// The frontend handles the actual delay timing via `setTimeout`; the backend
-/// just removes the event from the notified set.
+/// Removes the event from the active list immediately (the frontend hides the
+/// card right away).  After the snooze period elapses the reminder is
+/// re-emitted directly — we cannot rely on the polling loop because the
+/// event may have already started by then (i.e. `should_remind` returns
+/// `false` for past events).
 #[tauri::command]
 #[specta::specta]
 pub async fn snooze_reminder(
@@ -232,9 +278,54 @@ pub async fn snooze_reminder(
 ) -> Result<(), String> {
     log::info!("Reminder snoozed: {event_id} for {snooze_minutes} min");
 
-    let state = app.state::<NotifiedEvents>();
-    let mut ids = state.ids.lock().map_err(|e| format!("Lock error: {e}"))?;
-    ids.remove(&event_id);
+    // Stash the reminder payload before removing from the active list
+    let stashed_payload = {
+        let state = app.state::<ActiveReminders>();
+        let list = state.list.lock().map_err(|e| format!("Lock error: {e}"))?;
+        list.iter().find(|r| r.event_id == event_id).cloned()
+    };
+
+    // Remove from the active list immediately so the popup hides the card
+    if let Ok(mut list) = app.state::<ActiveReminders>().list.lock() {
+        list.retain(|r| r.event_id != event_id);
+    }
+
+    // After the snooze period, re-emit the reminder directly
+    let secs = u64::try_from(snooze_minutes * 60).unwrap_or(300);
+    let delay = std::time::Duration::from_secs(secs);
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(delay).await;
+        log::info!("Snooze elapsed for {event_id}, re-triggering reminder");
+
+        // Clear the dedup entry
+        let notified_state = app.state::<NotifiedEvents>();
+        if let Ok(mut ids) = notified_state.ids.lock() {
+            ids.retain(|key| !key.starts_with(&format!("{event_id}::")));
+        }
+
+        // Re-emit the reminder directly instead of waiting for the polling loop
+        if let Some(mut payload) = stashed_payload {
+            let now = chrono::Utc::now().timestamp();
+            payload.minutes_until = (payload.start - now) / 60;
+
+            // Re-add to the active list
+            if let Ok(mut list) = app.state::<ActiveReminders>().list.lock()
+                && !list.iter().any(|r| r.event_id == payload.event_id)
+            {
+                list.push(payload.clone());
+            }
+
+            // Re-add the dedup entry so the polling loop doesn't double-fire
+            if let Ok(mut ids) = notified_state.ids.lock() {
+                ids.insert(format!("{}::{}", payload.event_id, payload.start));
+            }
+
+            let _ = app.emit("calendar:reminder", payload);
+
+            // Show/focus the popup window
+            crate::reminders::show_reminder_window(&app);
+        }
+    });
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useUIStore } from '../store/uiStore'
 import type { CalEvent, Account } from '../types/models'
@@ -231,10 +231,10 @@ describe('CalendarView', () => {
     const lefts = Array.from(blocks).map((b) => b.style.left)
     expect(lefts[0]).not.toBe(lefts[1])
 
-    // Each should be ~50% width
+    // First event gets full 50% width; last column gets 15% right inset (35%)
     const widths = Array.from(blocks).map((b) => b.style.width)
     expect(widths[0]).toContain('50%')
-    expect(widths[1]).toContain('50%')
+    expect(widths[1]).toContain('35%')
   })
 
   it('highlights today column with special day number styling', () => {
@@ -300,6 +300,35 @@ describe('CalendarView', () => {
     )
 
     expect(screen.queryByTestId('resize-handle-ad1')).toBeNull()
+  })
+
+  it('opens edit modal when clicking a timed event', async () => {
+    const startLocal = new Date(2026, 2, 4, 9, 0, 0)
+    const endLocal = new Date(2026, 2, 4, 10, 0, 0)
+    const events = [
+      makeEvent({
+        title: 'Clickable Event',
+        start: startLocal.getTime() / 1000,
+        end: endLocal.getTime() / 1000,
+      }),
+    ]
+
+    render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    const block = screen.getByTestId('event-block-ev1')
+    // The click-to-edit is now handled via mouseDown → mouseUp without drag threshold
+    fireEvent.mouseDown(block, { clientX: 100, clientY: 100 })
+    fireEvent.mouseUp(document)
+
+    const state = useUIStore.getState()
+    expect(state.showEventModal).toBe(true)
+    expect(state.eventModalDefaults?.mode).toBe('edit')
+    expect(state.eventModalDefaults?.title).toBe('Clickable Event')
+    expect(state.eventModalDefaults?.eventId).toBe('ev1')
   })
 
   it('renders event blocks with data-testid for drag interaction', () => {
