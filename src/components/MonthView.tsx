@@ -49,7 +49,12 @@ function buildMonthGrid(viewDate: string, weekStartDay: WeekStartDay): Date[][] 
   return weeks
 }
 
-export default function MonthView({ events, calendars = [], accounts, isFetching }: MonthViewProps) {
+export default function MonthView({
+  events,
+  calendars = [],
+  accounts,
+  isFetching,
+}: MonthViewProps) {
   const calendarViewDate = useUIStore((s) => s.calendarViewDate)
   const weekStartDay = useUIStore((s) => s.weekStartDay)
   const openEventModal = useUIStore((s) => s.openEventModal)
@@ -73,8 +78,7 @@ export default function MonthView({ events, calendars = [], accounts, isFetching
   const isToday = (d: Date) =>
     d.getFullYear() === today.year && d.getMonth() === today.month && d.getDate() === today.date
 
-  const isCurrentMonth = (d: Date) =>
-    d.getFullYear() === viewYear && d.getMonth() === viewMonth - 1
+  const isCurrentMonth = (d: Date) => d.getFullYear() === viewYear && d.getMonth() === viewMonth - 1
 
   // Group events by date key "YYYY-MM-DD"
   const eventsByDate = useMemo(() => {
@@ -214,9 +218,7 @@ export default function MonthView({ events, calendars = [], accounts, isFetching
                             openEditModal(ev)
                           }}
                         >
-                          {timeStr && (
-                            <span className={styles.eventTime}>{timeStr}</span>
-                          )}
+                          {timeStr && <span className={styles.eventTime}>{timeStr}</span>}
                           <span className={styles.eventTitle}>{ev.title}</span>
                         </div>
                       )

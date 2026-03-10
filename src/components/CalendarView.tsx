@@ -232,18 +232,21 @@ export default function CalendarView({
   }, [])
 
   /** Determine which day column the cursor is over. */
-  const clientXToDayIndex = useCallback((clientX: number): number => {
-    for (let i = 0; i < dayColumnRefs.current.length; i++) {
-      const col = dayColumnRefs.current[i]
-      if (!col) continue
-      const rect = col.getBoundingClientRect()
-      if (clientX >= rect.left && clientX <= rect.right) return i
-    }
-    // Fallback: clamp to edges
-    const first = dayColumnRefs.current[0]
-    if (first && clientX < first.getBoundingClientRect().left) return 0
-    return dayCount - 1
-  }, [dayCount])
+  const clientXToDayIndex = useCallback(
+    (clientX: number): number => {
+      for (let i = 0; i < dayColumnRefs.current.length; i++) {
+        const col = dayColumnRefs.current[i]
+        if (!col) continue
+        const rect = col.getBoundingClientRect()
+        if (clientX >= rect.left && clientX <= rect.right) return i
+      }
+      // Fallback: clamp to edges
+      const first = dayColumnRefs.current[0]
+      if (first && clientX < first.getBoundingClientRect().left) return 0
+      return dayCount - 1
+    },
+    [dayCount],
+  )
 
   /** Open the event modal in edit mode for an existing event. */
   const openEditModal = useCallback(

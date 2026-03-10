@@ -35,14 +35,16 @@ export default function ReminderPopupWindow() {
 
   // On mount, fetch any reminders emitted before the JS listener was ready
   useEffect(() => {
-    invoke<ReminderPayload[]>('get_active_reminders').then((payloads) => {
-      const store = useUIStore.getState()
-      for (const p of payloads) {
-        store.addReminder(p)
-      }
-    }).catch(() => {
-      // Best-effort; the listener will catch future events
-    })
+    invoke<ReminderPayload[]>('get_active_reminders')
+      .then((payloads) => {
+        const store = useUIStore.getState()
+        for (const p of payloads) {
+          store.addReminder(p)
+        }
+      })
+      .catch(() => {
+        // Best-effort; the listener will catch future events
+      })
   }, [])
 
   // Auto-hide the window when reminders go from non-zero to zero.
@@ -51,9 +53,11 @@ export default function ReminderPopupWindow() {
     if (reminders.length > 0) {
       hadRemindersRef.current = true
     } else if (hadRemindersRef.current) {
-      getCurrentWindow().hide().catch(() => {
-        // Window may already be closed
-      })
+      getCurrentWindow()
+        .hide()
+        .catch(() => {
+          // Window may already be closed
+        })
     }
   }, [reminders.length])
 
