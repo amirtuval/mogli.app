@@ -169,7 +169,7 @@ describe('Sidebar', () => {
     const mockVersion = await getVersion()
     renderSidebar()
 
-    const version = await screen.findByText(`v${mockVersion}`)
+    const version = await screen.findByText(`Mogly v${mockVersion}`)
     expect(version).toBeInTheDocument()
   })
 })

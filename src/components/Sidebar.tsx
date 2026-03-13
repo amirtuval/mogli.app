@@ -174,7 +174,7 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
       </div>
 
       {/* Version */}
-      {version && <div className={styles.version}>v{version}</div>}
+      {version && <div className={styles.version}>Mogly v{version}</div>}
     </aside>
   )
 }
