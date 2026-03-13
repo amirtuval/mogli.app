@@ -16,3 +16,8 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
   emit: vi.fn(),
 }))
+
+// Mock @tauri-apps/api/app
+vi.mock('@tauri-apps/api/app', () => ({
+  getVersion: vi.fn(() => Promise.resolve('0.2.1')),
+}))

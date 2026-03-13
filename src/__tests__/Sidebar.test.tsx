@@ -163,4 +163,13 @@ describe('Sidebar', () => {
     expect(state.showCompose).toBe(true)
     expect(state.composeContext).toEqual({ mode: 'new' })
   })
+
+  it('should display the app version', async () => {
+    const { getVersion } = await import('@tauri-apps/api/app')
+    const mockVersion = await getVersion()
+    renderSidebar()
+
+    const version = await screen.findByText(`Mogly v${mockVersion}`)
+    expect(version).toBeInTheDocument()
+  })
 })
