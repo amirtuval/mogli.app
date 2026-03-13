@@ -65,10 +65,11 @@
 /* ── Nav toggle: Mail / Calendar ── */
 .navToggle {
   display: flex;
-  padding: 10px 10px 8px;
-  border-bottom: 1px solid var(--border);
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
   gap: 4px;
   flex-shrink: 0;
+  margin-top: auto;
 }
 
 .navBtn {

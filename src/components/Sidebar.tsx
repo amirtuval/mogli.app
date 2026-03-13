@@ -55,29 +55,6 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
         </div>
       </div>
 
-      {/* Mail / Calendar toggle */}
-      <div className={styles.navToggle}>
-        {navItems.map(({ id, icon, label, badge }) => (
-          <button
-            key={id}
-            className={`${styles.navBtn} ${activeView === id ? styles.navBtnActive : ''}`}
-            onClick={() => setActiveView(id)}
-          >
-            <span className={styles.navBtnIcon}>{icon}</span>
-            {label}
-            {badge > 0 && (
-              <span
-                className={`${styles.navBadge} ${
-                  activeView === id ? styles.navBadgeActive : styles.navBadgeInactive
-                }`}
-              >
-                {badge}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
       {/* Compose button (mail mode only) */}
       {activeView === 'mail' && (
         <button className={styles.composeBtn} onClick={() => openCompose({ mode: 'new' })}>
@@ -162,6 +139,29 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
             <CalendarList accounts={accounts} calendars={calendars} />
           </>
         )}
+      </div>
+
+      {/* Mail / Calendar toggle */}
+      <div className={styles.navToggle}>
+        {navItems.map(({ id, icon, label, badge }) => (
+          <button
+            key={id}
+            className={`${styles.navBtn} ${activeView === id ? styles.navBtnActive : ''}`}
+            onClick={() => setActiveView(id)}
+          >
+            <span className={styles.navBtnIcon}>{icon}</span>
+            {label}
+            {badge > 0 && (
+              <span
+                className={`${styles.navBadge} ${
+                  activeView === id ? styles.navBadgeActive : styles.navBadgeInactive
+                }`}
+              >
+                {badge}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
     </aside>
   )
