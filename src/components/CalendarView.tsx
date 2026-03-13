@@ -128,6 +128,16 @@ function snapMinutes(m: number): number {
   return Math.round(m / SNAP_MINUTES) * SNAP_MINUTES
 }
 
+/** Check whether a string looks like a URL (http/https). */
+function isUrl(s: string): boolean {
+  try {
+    const url = new URL(s)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 /** Convert minutes-since-midnight to "H:MM" display string. */
 function formatMinutes(totalMinutes: number): string {
   const h = Math.floor(totalMinutes / 60)
@@ -628,7 +638,13 @@ export default function CalendarView({
               </div>
             )}
             {ev.location && (
-              <div className={styles.popoverRow}>
+              <div
+                className={styles.popoverRow}
+                style={
+                  isUrl(ev.location) ? { cursor: 'pointer', color: 'var(--accent)' } : undefined
+                }
+                onClick={isUrl(ev.location) ? () => window.open(ev.location!, '_blank') : undefined}
+              >
                 <span className={styles.popoverIcon}>⌖</span>
                 {ev.location}
               </div>
@@ -714,7 +730,22 @@ export default function CalendarView({
                             </div>
                           )}
                           {ev.location && (
-                            <div className={styles.popoverRow}>
+                            <div
+                              className={styles.popoverRow}
+                              style={
+                                isUrl(ev.location)
+                                  ? { cursor: 'pointer', color: 'var(--accent)' }
+                                  : undefined
+                              }
+                              onClick={
+                                isUrl(ev.location)
+                                  ? (e) => {
+                                      e.stopPropagation()
+                                      window.open(ev.location!, '_blank')
+                                    }
+                                  : undefined
+                              }
+                            >
                               <span className={styles.popoverIcon}>⌖</span>
                               {ev.location}
                             </div>
