@@ -35,6 +35,7 @@ pub struct CalEvent {
     pub location: Option<String>,
     pub description: Option<String>,
     pub color: Option<String>,
+    pub conference_url: Option<String>,
 }
 
 /// Message metadata — never stores body.

@@ -70,6 +70,7 @@ export interface CalEvent {
   location: string | null
   description: string | null
   color: string | null
+  conference_url: string | null
 }
 
 export interface SendMessageRequest {

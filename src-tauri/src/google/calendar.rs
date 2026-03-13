@@ -40,6 +40,7 @@ struct EventResource {
     description: Option<String>,
     color_id: Option<String>,
     status: Option<String>,
+    conference_data: Option<ConferenceData>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +50,19 @@ struct EventDateTime {
     date_time: Option<String>,
     /// Date string (YYYY-MM-DD) for all-day events.
     date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConferenceData {
+    entry_points: Option<Vec<EntryPoint>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EntryPoint {
+    entry_point_type: Option<String>,
+    uri: Option<String>,
 }
 
 // --- Public API ---
@@ -127,6 +141,7 @@ pub async fn fetch_events(
             ("singleEvents", &"true".to_string()),
             ("orderBy", &"startTime".to_string()),
             ("maxResults", &"250".to_string()),
+            ("conferenceDataVersion", &"1".to_string()),
         ])
         .send()
         .await
@@ -463,6 +478,15 @@ fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Opt
 
     let (start, end, all_day) = parse_event_times(start_dt, end_dt)?;
 
+    let conference_url = event
+        .conference_data
+        .and_then(|cd| cd.entry_points)
+        .and_then(|eps| {
+            eps.into_iter()
+                .find(|ep| ep.entry_point_type.as_deref() == Some("video"))
+                .and_then(|ep| ep.uri)
+        });
+
     Some(CalEvent {
         id,
         account_id: account_id.to_string(),
@@ -474,6 +498,7 @@ fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Opt
         location: event.location,
         description: event.description,
         color: event.color_id.as_deref().and_then(color_id_to_hex),
+        conference_url,
     })
 }
 
@@ -626,6 +651,7 @@ mod tests {
             description: None,
             color_id: None,
             status: Some("confirmed".to_string()),
+            conference_data: None,
         };
 
         let cal_event = parse_event(event, "acct1", "primary").unwrap();
@@ -654,6 +680,7 @@ mod tests {
             description: None,
             color_id: None,
             status: Some("cancelled".to_string()),
+            conference_data: None,
         };
 
         // Cancelled events should be filtered in fetch_events; here verify
@@ -675,6 +702,7 @@ mod tests {
                 location: None,
                 description: None,
                 color: None,
+                conference_url: None,
             },
             CalEvent {
                 id: "e2".to_string(),
@@ -687,6 +715,7 @@ mod tests {
                 location: None,
                 description: None,
                 color: None,
+                conference_url: None,
             },
         ];
 
@@ -822,5 +851,50 @@ mod tests {
             .and_utc()
             .timestamp();
         assert_eq!(timestamp_to_date_string(ts), "2026-03-06");
+    }
+
+    #[test]
+    fn test_event_with_conference_data() {
+        let json = r#"{
+            "id": "ev-conf",
+            "summary": "Zoom Meeting",
+            "start": { "dateTime": "2026-03-06T14:00:00Z" },
+            "end": { "dateTime": "2026-03-06T15:00:00Z" },
+            "status": "confirmed",
+            "conferenceData": {
+                "entryPoints": [
+                    {
+                        "entryPointType": "video",
+                        "uri": "https://zoom.us/j/123456789"
+                    },
+                    {
+                        "entryPointType": "phone",
+                        "uri": "tel:+1234567890"
+                    }
+                ]
+            }
+        }"#;
+
+        let event: EventResource = serde_json::from_str(json).unwrap();
+        let cal_event = parse_event(event, "acct1", "primary").unwrap();
+        assert_eq!(
+            cal_event.conference_url.as_deref(),
+            Some("https://zoom.us/j/123456789")
+        );
+    }
+
+    #[test]
+    fn test_event_without_conference_data() {
+        let json = r#"{
+            "id": "ev-no-conf",
+            "summary": "Regular Meeting",
+            "start": { "dateTime": "2026-03-06T14:00:00Z" },
+            "end": { "dateTime": "2026-03-06T15:00:00Z" },
+            "status": "confirmed"
+        }"#;
+
+        let event: EventResource = serde_json::from_str(json).unwrap();
+        let cal_event = parse_event(event, "acct1", "primary").unwrap();
+        assert!(cal_event.conference_url.is_none());
     }
 }

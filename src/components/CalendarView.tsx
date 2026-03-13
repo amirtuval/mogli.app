@@ -633,6 +633,16 @@ export default function CalendarView({
                 {ev.location}
               </div>
             )}
+            {ev.conference_url && (
+              <div
+                className={styles.popoverRow}
+                style={{ cursor: 'pointer', color: 'var(--accent)' }}
+                onClick={() => window.open(ev.conference_url!, '_blank')}
+              >
+                <span className={styles.popoverIcon}>▶</span>
+                Join video call
+              </div>
+            )}
             {ev.description && <div className={styles.popoverDesc}>{ev.description}</div>}
           </div>
         )}
@@ -707,6 +717,19 @@ export default function CalendarView({
                             <div className={styles.popoverRow}>
                               <span className={styles.popoverIcon}>⌖</span>
                               {ev.location}
+                            </div>
+                          )}
+                          {ev.conference_url && (
+                            <div
+                              className={styles.popoverRow}
+                              style={{ cursor: 'pointer', color: 'var(--accent)' }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(ev.conference_url!, '_blank')
+                              }}
+                            >
+                              <span className={styles.popoverIcon}>▶</span>
+                              Join video call
                             </div>
                           )}
                           {ev.description && (
