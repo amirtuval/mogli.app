@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { useQueryClient } from '@tanstack/react-query'
 import type { CalEvent, Account, Calendar } from '../types/models'
 import { useUIStore } from '../store/uiStore'
@@ -136,6 +137,42 @@ function isUrl(s: string): boolean {
   } catch {
     return false
   }
+}
+
+/** Render text with URLs turned into clickable links. */
+function Linkified({ text, className }: { text: string; className?: string }) {
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  const regex = /https?:\/\/[^\s<]+/g
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    const url = match[0]
+    parts.push(
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--accent)', cursor: 'pointer' }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          void shellOpen(url)
+        }}
+      >
+        {url}
+      </a>,
+    )
+    lastIndex = match.index + url.length
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+  return <span className={className}>{parts}</span>
 }
 
 /** Convert minutes-since-midnight to "H:MM" display string. */
@@ -643,7 +680,7 @@ export default function CalendarView({
                 style={
                   isUrl(ev.location) ? { cursor: 'pointer', color: 'var(--accent)' } : undefined
                 }
-                onClick={isUrl(ev.location) ? () => window.open(ev.location!, '_blank') : undefined}
+                onClick={isUrl(ev.location) ? () => void shellOpen(ev.location!) : undefined}
               >
                 <span className={styles.popoverIcon}>⌖</span>
                 {ev.location}
@@ -653,13 +690,17 @@ export default function CalendarView({
               <div
                 className={styles.popoverRow}
                 style={{ cursor: 'pointer', color: 'var(--accent)' }}
-                onClick={() => window.open(ev.conference_url!, '_blank')}
+                onClick={() => void shellOpen(ev.conference_url!)}
               >
                 <span className={styles.popoverIcon}>▶</span>
                 Join video call
               </div>
             )}
-            {ev.description && <div className={styles.popoverDesc}>{ev.description}</div>}
+            {ev.description && (
+              <div className={styles.popoverDesc}>
+                <Linkified text={ev.description} />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -741,7 +782,7 @@ export default function CalendarView({
                                 isUrl(ev.location)
                                   ? (e) => {
                                       e.stopPropagation()
-                                      window.open(ev.location!, '_blank')
+                                      void shellOpen(ev.location!)
                                     }
                                   : undefined
                               }
@@ -756,7 +797,7 @@ export default function CalendarView({
                               style={{ cursor: 'pointer', color: 'var(--accent)' }}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                window.open(ev.conference_url!, '_blank')
+                                void shellOpen(ev.conference_url!)
                               }}
                             >
                               <span className={styles.popoverIcon}>▶</span>
@@ -764,7 +805,9 @@ export default function CalendarView({
                             </div>
                           )}
                           {ev.description && (
-                            <div className={styles.popoverDesc}>{ev.description}</div>
+                            <div className={styles.popoverDesc}>
+                              <Linkified text={ev.description} />
+                            </div>
                           )}
                         </div>
                       </div>

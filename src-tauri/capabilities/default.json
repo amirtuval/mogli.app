@@ -16,6 +16,7 @@
     "notification:allow-notify",
     "core:tray:default",
     "updater:default",
-    "process:default"
+    "process:default",
+    "shell:allow-open"
   ]
 }
