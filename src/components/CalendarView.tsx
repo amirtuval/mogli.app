@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { useQueryClient } from '@tanstack/react-query'
 import type { CalEvent, Account, Calendar } from '../types/models'
 import { useUIStore } from '../store/uiStore'
@@ -126,6 +127,52 @@ function pad2(n: number): string {
 /** Snap minutes to nearest SNAP_MINUTES increment (e.g. 15). */
 function snapMinutes(m: number): number {
   return Math.round(m / SNAP_MINUTES) * SNAP_MINUTES
+}
+
+/** Check whether a string looks like a URL (http/https). */
+function isUrl(s: string): boolean {
+  try {
+    const url = new URL(s)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/** Render text with URLs turned into clickable links. */
+function Linkified({ text, className }: { text: string; className?: string }) {
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  const regex = /https?:\/\/[^\s<]+/g
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    const url = match[0]
+    parts.push(
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--accent)', cursor: 'pointer' }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          void shellOpen(url)
+        }}
+      >
+        {url}
+      </a>,
+    )
+    lastIndex = match.index + url.length
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+  return <span className={className}>{parts}</span>
 }
 
 /** Convert minutes-since-midnight to "H:MM" display string. */
@@ -628,12 +675,32 @@ export default function CalendarView({
               </div>
             )}
             {ev.location && (
-              <div className={styles.popoverRow}>
+              <div
+                className={styles.popoverRow}
+                style={
+                  isUrl(ev.location) ? { cursor: 'pointer', color: 'var(--accent)' } : undefined
+                }
+                onClick={isUrl(ev.location) ? () => void shellOpen(ev.location!) : undefined}
+              >
                 <span className={styles.popoverIcon}>⌖</span>
                 {ev.location}
               </div>
             )}
-            {ev.description && <div className={styles.popoverDesc}>{ev.description}</div>}
+            {ev.conference_url && (
+              <div
+                className={styles.popoverRow}
+                style={{ cursor: 'pointer', color: 'var(--accent)' }}
+                onClick={() => void shellOpen(ev.conference_url!)}
+              >
+                <span className={styles.popoverIcon}>▶</span>
+                Join video call
+              </div>
+            )}
+            {ev.description && (
+              <div className={styles.popoverDesc}>
+                <Linkified text={ev.description} />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -704,13 +771,43 @@ export default function CalendarView({
                             </div>
                           )}
                           {ev.location && (
-                            <div className={styles.popoverRow}>
+                            <div
+                              className={styles.popoverRow}
+                              style={
+                                isUrl(ev.location)
+                                  ? { cursor: 'pointer', color: 'var(--accent)' }
+                                  : undefined
+                              }
+                              onClick={
+                                isUrl(ev.location)
+                                  ? (e) => {
+                                      e.stopPropagation()
+                                      void shellOpen(ev.location!)
+                                    }
+                                  : undefined
+                              }
+                            >
                               <span className={styles.popoverIcon}>⌖</span>
                               {ev.location}
                             </div>
                           )}
+                          {ev.conference_url && (
+                            <div
+                              className={styles.popoverRow}
+                              style={{ cursor: 'pointer', color: 'var(--accent)' }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void shellOpen(ev.conference_url!)
+                              }}
+                            >
+                              <span className={styles.popoverIcon}>▶</span>
+                              Join video call
+                            </div>
+                          )}
                           {ev.description && (
-                            <div className={styles.popoverDesc}>{ev.description}</div>
+                            <div className={styles.popoverDesc}>
+                              <Linkified text={ev.description} />
+                            </div>
                           )}
                         </div>
                       </div>

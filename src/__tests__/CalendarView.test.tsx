@@ -46,6 +46,7 @@ function makeEvent(overrides: Partial<CalEvent> = {}): CalEvent {
     location: null,
     description: null,
     color: null,
+    conference_url: null,
     ...overrides,
   }
 }

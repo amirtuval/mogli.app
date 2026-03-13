@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Account, Calendar, CalEvent } from '../types/models'
 import { useUIStore } from '../store/uiStore'
@@ -78,6 +79,52 @@ function todayISO(): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
+/** Check whether a string looks like a URL (http/https). */
+function isUrl(s: string): boolean {
+  try {
+    const url = new URL(s)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/** Render text with URLs turned into clickable links. */
+function Linkified({ text }: { text: string }) {
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  const regex = /https?:\/\/[^\s<]+/g
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    const url = match[0]
+    parts.push(
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={styles.linkInline}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          void shellOpen(url)
+        }}
+      >
+        {url}
+      </a>,
+    )
+    lastIndex = match.index + url.length
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+  return <>{parts}</>
+}
+
 function nowRounded15(): { startTime: string; endTime: string } {
   const now = new Date()
   const { hours, minutes } = roundUpTo15(now.getHours(), now.getMinutes())
@@ -115,6 +162,12 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
   const [recurrence, setRecurrence] = useState(initial.recurrence ?? 'none')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+
+  // Read-only ↔ edit toggle for location and description
+  const [editingLocation, setEditingLocation] = useState(!isEdit || !initial.location)
+  const [editingDesc, setEditingDesc] = useState(!isEdit || !initial.description)
+  const locationInputRef = useRef<HTMLInputElement>(null)
+  const descTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Multiple reminders
   const [reminders, setReminders] = useState<ReminderEntry[]>(() => {
@@ -495,12 +548,44 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
           {/* Location */}
           <div className={styles.field}>
             <span className={styles.label}>Location</span>
-            <input
-              className={styles.input}
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Add location (optional)"
-            />
+            {!editingLocation && location ? (
+              <div
+                className={styles.readonlyValue}
+                onClick={() => {
+                  setEditingLocation(true)
+                  requestAnimationFrame(() => locationInputRef.current?.focus())
+                }}
+              >
+                {isUrl(location) ? (
+                  <a
+                    href={location}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.linkInline}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      void shellOpen(location)
+                    }}
+                  >
+                    {location}
+                  </a>
+                ) : (
+                  <Linkified text={location} />
+                )}
+              </div>
+            ) : (
+              <input
+                ref={locationInputRef}
+                className={styles.input}
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                onBlur={() => {
+                  if (location) setEditingLocation(false)
+                }}
+                placeholder="Add location (optional)"
+              />
+            )}
           </div>
 
           {/* Description (collapsible) */}
@@ -511,14 +596,30 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
           ) : (
             <div className={styles.field}>
               <span className={styles.label}>Description</span>
-              <textarea
-                className={styles.input}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add description (optional)"
-                rows={3}
-                style={{ resize: 'vertical' }}
-              />
+              {!editingDesc && description ? (
+                <div
+                  className={styles.readonlyValue}
+                  onClick={() => {
+                    setEditingDesc(true)
+                    requestAnimationFrame(() => descTextareaRef.current?.focus())
+                  }}
+                >
+                  <Linkified text={description} />
+                </div>
+              ) : (
+                <textarea
+                  ref={descTextareaRef}
+                  className={styles.input}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => {
+                    if (description) setEditingDesc(false)
+                  }}
+                  placeholder="Add description (optional)"
+                  rows={3}
+                  style={{ resize: 'vertical' }}
+                />
+              )}
             </div>
           )}
 

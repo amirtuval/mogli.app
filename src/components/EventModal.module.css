@@ -208,6 +208,29 @@
   text-decoration: underline;
 }
 
+.readonlyValue {
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.linkInline {
+  color: var(--accent, #4f9cf9);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.linkInline:hover {
+  text-decoration: underline;
+}
+
 .error {
   color: #f43f5e;
   font-size: 12px;
