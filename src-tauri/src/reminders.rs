@@ -102,6 +102,10 @@ async fn check_upcoming_events(app: &AppHandle) {
     };
 
     for account in &accounts {
+        // Skip accounts with expired/revoked tokens
+        if account.auth_expired {
+            continue;
+        }
         check_account_events(app, &creds, account, &enabled_state, now, time_max).await;
     }
 }

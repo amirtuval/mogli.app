@@ -16,6 +16,7 @@ const MOCK_ACCOUNTS: Account[] = [
     display_name: 'Work',
     color: '#4f9cf9',
     history_id: '',
+    auth_expired: false,
   },
 ]
 

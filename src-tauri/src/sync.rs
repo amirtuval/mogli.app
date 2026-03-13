@@ -6,6 +6,7 @@ use tokio::time::interval;
 
 use crate::google::gmail as gmail_api;
 use crate::google::oauth::OAuthCredentials;
+use crate::keychain;
 use crate::store::{self, AccountStore};
 
 /// Fast notification pipe — polls `history.list` every 15 seconds.
@@ -62,6 +63,11 @@ async fn check_all_accounts(app: &AppHandle) {
     let mut found_new = false;
 
     for account in &accounts {
+        // Skip accounts with expired/revoked tokens
+        if account.auth_expired {
+            continue;
+        }
+
         match sync_account(
             &creds,
             app,
@@ -75,6 +81,15 @@ async fn check_all_accounts(app: &AppHandle) {
                 if has_new {
                     found_new = true;
                 }
+            }
+            Err(e) if e.starts_with("AUTH_EXPIRED:") => {
+                warn!(
+                    "Background sync: token expired/revoked for {}, marking account",
+                    account.email
+                );
+                let _ = store::set_auth_expired(app, &account.id, true);
+                let _ = keychain::delete_tokens(&account.email);
+                let _ = app.emit("account:auth_expired", &account.id);
             }
             Err(e) => {
                 error!("Background sync: failed for {}: {e}", account.email);

@@ -11,6 +11,7 @@ export interface Account {
   display_name: string
   color: string
   history_id: string
+  auth_expired: boolean
 }
 
 export interface MessageMeta {

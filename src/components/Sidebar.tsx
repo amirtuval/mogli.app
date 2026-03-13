@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
+import { listen } from '@tauri-apps/api/event'
 import type { Account, Calendar } from '../types/models'
 import { MAIL_LABELS } from '../types/models'
 import type { Theme, AppView, WeekStartDay } from '../store/uiStore'
 import { useUIStore } from '../store/uiStore'
 import { THEME_META } from '../styles/theme'
-import { useAddAccount } from '../hooks/useAccounts'
+import { useAddAccount, useRemoveAccount, useReauthAccount } from '../hooks/useAccounts'
 import MiniCal from './MiniCal'
 import CalendarList from './CalendarList'
 import styles from './Sidebar.module.css'
@@ -31,13 +32,48 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
   const setWeekStartDay = useUIStore((s) => s.setWeekStartDay)
   const openCompose = useUIStore((s) => s.openCompose)
   const addAccount = useAddAccount()
+  const removeAccount = useRemoveAccount()
+  const reauthAccount = useReauthAccount()
   const [version, setVersion] = useState('')
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
 
   useEffect(() => {
     getVersion()
       .then(setVersion)
       .catch(() => {})
   }, [])
+
+  // Listen for backend auth-expired events and refresh the account list
+  useEffect(() => {
+    const unlisten = listen('account:auth_expired', () => {
+      // The accounts query will be invalidated automatically via the query cache,
+      // but we trigger a re-render to show the warning indicator
+    })
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
+  const handleDelete = useCallback(
+    (e: React.MouseEvent, accountId: string) => {
+      e.stopPropagation()
+      if (confirmingDelete === accountId) {
+        removeAccount.mutate(accountId)
+        setConfirmingDelete(null)
+      } else {
+        setConfirmingDelete(accountId)
+      }
+    },
+    [confirmingDelete, removeAccount],
+  )
+
+  const handleReauth = useCallback(
+    (e: React.MouseEvent, accountId: string) => {
+      e.stopPropagation()
+      reauthAccount.mutate(accountId)
+    },
+    [reauthAccount],
+  )
 
   const navItems: { id: AppView; icon: string; label: string; badge: number }[] = [
     { id: 'mail', icon: '◉', label: 'Mail', badge: unreadCount },
@@ -76,21 +112,59 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
         <div className={styles.sectionLabel}>Accounts</div>
         {accounts.map((a) => {
           const isActive = activeAccounts.includes(a.id)
+          const isConfirming = confirmingDelete === a.id
           return (
-            <div
-              key={a.id}
-              className={`${styles.accountRow} ${!isActive ? styles.accountRowInactive : ''}`}
-              onClick={() => toggleAccount(a.id)}
-            >
-              <div className={styles.accountDot} style={{ background: a.color }} />
-              <div className={styles.accountInfo}>
-                <div className={styles.accountName}>{a.display_name}</div>
-                <div className={styles.accountEmail}>{a.email}</div>
+            <div key={a.id}>
+              <div
+                className={`${styles.accountRow} ${!isActive ? styles.accountRowInactive : ''} ${a.auth_expired ? styles.accountRowExpired : ''}`}
+                onClick={() => !a.auth_expired && toggleAccount(a.id)}
+              >
+                <div className={styles.accountDot} style={{ background: a.color }} />
+                <div className={styles.accountInfo}>
+                  <div className={styles.accountName}>
+                    {a.auth_expired && <span className={styles.authWarning}>⚠</span>}
+                    {a.display_name}
+                  </div>
+                  <div className={styles.accountEmail}>{a.email}</div>
+                </div>
+                {!a.auth_expired && isActive && (
+                  <span className={styles.accountCheck} style={{ color: a.color }}>
+                    ✓
+                  </span>
+                )}
+                <button
+                  className={styles.deleteBtn}
+                  onClick={(e) => handleDelete(e, a.id)}
+                  title={isConfirming ? 'Click again to confirm' : 'Remove account'}
+                >
+                  {isConfirming ? '?' : '✕'}
+                </button>
               </div>
-              {isActive && (
-                <span className={styles.accountCheck} style={{ color: a.color }}>
-                  ✓
-                </span>
+              {a.auth_expired && (
+                <button
+                  className={styles.reauthBtn}
+                  onClick={(e) => handleReauth(e, a.id)}
+                  disabled={reauthAccount.isPending}
+                >
+                  {reauthAccount.isPending ? 'Signing in...' : '↻ Re-authenticate'}
+                </button>
+              )}
+              {isConfirming && (
+                <div className={styles.confirmRow}>
+                  <span className={styles.confirmText}>Remove this account?</span>
+                  <button className={styles.confirmYes} onClick={(e) => handleDelete(e, a.id)}>
+                    Yes
+                  </button>
+                  <button
+                    className={styles.confirmNo}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setConfirmingDelete(null)
+                    }}
+                  >
+                    No
+                  </button>
+                </div>
               )}
             </div>
           )

@@ -6,7 +6,14 @@ import { useUIStore } from '../store/uiStore'
 import MailView from '../components/MailView'
 
 const MOCK_ACCOUNTS: Account[] = [
-  { id: 'a1', email: 'work@test.com', display_name: 'Work', color: '#4f9cf9', history_id: '' },
+  {
+    id: 'a1',
+    email: 'work@test.com',
+    display_name: 'Work',
+    color: '#4f9cf9',
+    history_id: '',
+    auth_expired: false,
+  },
 ]
 
 const MOCK_MESSAGES: MessageMeta[] = [

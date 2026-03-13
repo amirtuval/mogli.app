@@ -215,6 +215,21 @@ pub fn update_history_id(
     Ok(())
 }
 
+/// Mark an account's `auth_expired` flag and persist the change.
+pub fn set_auth_expired(app: &AppHandle, account_id: &str, expired: bool) -> Result<(), String> {
+    let state = app.state::<AccountStore>();
+    let mut guard = state
+        .accounts
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
+
+    if let Some(account) = guard.iter_mut().find(|a| a.id == account_id) {
+        account.auth_expired = expired;
+    }
+    save_accounts(app, &guard)?;
+    Ok(())
+}
+
 /// Look up an account's email by its ID.
 pub fn account_email(app: &AppHandle, account_id: &str) -> Result<String, String> {
     let state = app.state::<AccountStore>();

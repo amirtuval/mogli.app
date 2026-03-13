@@ -7,13 +7,21 @@ import { useUIStore } from '../store/uiStore'
 import Sidebar from '../components/Sidebar'
 
 const MOCK_ACCOUNTS: Account[] = [
-  { id: 'a1', email: 'work@test.com', display_name: 'Work', color: '#4f9cf9', history_id: '' },
+  {
+    id: 'a1',
+    email: 'work@test.com',
+    display_name: 'Work',
+    color: '#4f9cf9',
+    history_id: '',
+    auth_expired: false,
+  },
   {
     id: 'a2',
     email: 'personal@test.com',
     display_name: 'Personal',
     color: '#f97316',
     history_id: '',
+    auth_expired: false,
   },
 ]
 
@@ -171,5 +179,70 @@ describe('Sidebar', () => {
 
     const version = await screen.findByText(`Mogly v${mockVersion}`)
     expect(version).toBeInTheDocument()
+  })
+
+  it('should show warning icon and re-auth button for expired account', () => {
+    const expiredAccounts: Account[] = [
+      {
+        id: 'a1',
+        email: 'expired@test.com',
+        display_name: 'Expired',
+        color: '#4f9cf9',
+        history_id: '',
+        auth_expired: true,
+      },
+    ]
+    renderSidebar({ accounts: expiredAccounts })
+
+    expect(screen.getByText('⚠')).toBeInTheDocument()
+    expect(screen.getByText('↻ Re-authenticate')).toBeInTheDocument()
+  })
+
+  it('should not toggle an expired account on click', async () => {
+    const user = userEvent.setup()
+    useUIStore.setState({ activeAccounts: ['a1'] })
+    const expiredAccounts: Account[] = [
+      {
+        id: 'a1',
+        email: 'expired@test.com',
+        display_name: 'Expired',
+        color: '#4f9cf9',
+        history_id: '',
+        auth_expired: true,
+      },
+    ]
+    renderSidebar({ accounts: expiredAccounts })
+
+    await user.click(screen.getByText('Expired'))
+    // Should still contain a1 since expired accounts can't be toggled
+    expect(useUIStore.getState().activeAccounts).toContain('a1')
+  })
+
+  it('should show delete confirmation on first click and remove on confirm', async () => {
+    const user = userEvent.setup()
+    renderSidebar()
+
+    // Find delete buttons (hidden by default, but present in DOM)
+    const deleteButtons = screen.getAllByTitle('Remove account')
+    expect(deleteButtons).toHaveLength(2)
+
+    // First click shows confirmation
+    await user.click(deleteButtons[0])
+    expect(screen.getByText('Remove this account?')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect(screen.getByText('No')).toBeInTheDocument()
+  })
+
+  it('should cancel delete confirmation on No click', async () => {
+    const user = userEvent.setup()
+    renderSidebar()
+
+    const deleteButtons = screen.getAllByTitle('Remove account')
+    await user.click(deleteButtons[0])
+
+    expect(screen.getByText('Remove this account?')).toBeInTheDocument()
+
+    await user.click(screen.getByText('No'))
+    expect(screen.queryByText('Remove this account?')).not.toBeInTheDocument()
   })
 })

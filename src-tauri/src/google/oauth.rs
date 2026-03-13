@@ -262,6 +262,10 @@ pub async fn get_valid_token(creds: &OAuthCredentials, email: &str) -> Result<St
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
+        // Detect expired/revoked tokens so callers can mark the account
+        if body.contains("invalid_grant") {
+            return Err(format!("AUTH_EXPIRED:{email}"));
+        }
         return Err(format!("Token refresh failed: {body}"));
     }
 
