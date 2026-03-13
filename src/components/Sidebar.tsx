@@ -34,7 +34,9 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
   const [version, setVersion] = useState('')
 
   useEffect(() => {
-    getVersion().then(setVersion).catch(() => {})
+    getVersion()
+      .then(setVersion)
+      .catch(() => {})
   }, [])
 
   const navItems: { id: AppView; icon: string; label: string; badge: number }[] = [
