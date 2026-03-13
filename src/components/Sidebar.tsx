@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+import { getVersion } from '@tauri-apps/api/app'
 import type { Account, Calendar } from '../types/models'
 import { MAIL_LABELS } from '../types/models'
 import type { Theme, AppView, WeekStartDay } from '../store/uiStore'
@@ -29,6 +31,11 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
   const setWeekStartDay = useUIStore((s) => s.setWeekStartDay)
   const openCompose = useUIStore((s) => s.openCompose)
   const addAccount = useAddAccount()
+  const [version, setVersion] = useState('')
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {})
+  }, [])
 
   const navItems: { id: AppView; icon: string; label: string; badge: number }[] = [
     { id: 'mail', icon: '◉', label: 'Mail', badge: unreadCount },
@@ -163,6 +170,9 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
           </button>
         ))}
       </div>
+
+      {/* Version */}
+      {version && <div className={styles.version}>v{version}</div>}
     </aside>
   )
 }
