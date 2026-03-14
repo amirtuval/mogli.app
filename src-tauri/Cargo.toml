@@ -1,6 +1,6 @@
 [package]
 name = "mogly"
-version = "0.2.12"
+version = "0.2.13"
 description = "Unified Gmail & Google Calendar desktop app"
 authors = ["you"]
 license = "MIT"
