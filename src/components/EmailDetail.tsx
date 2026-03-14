@@ -19,6 +19,43 @@ function sanitizeHtml(html: string): string {
     .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
 }
 
+/**
+ * Renders email HTML inside a Shadow DOM to isolate it from the app's
+ * global CSS reset (which strips margins/padding from all elements and
+ * collapses email layouts). The shadow root provides a clean rendering
+ * context where the email's own styles work correctly.
+ */
+function ShadowHtml({ html, theme }: { html: string; theme: string }) {
+  const hostRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+
+    // Attach shadow root only once
+    const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
+
+    // Theme-aware email background so the content blends with the app
+    const colors =
+      theme === 'light'
+        ? { bg: '#ffffff', fg: '#1a1a1a', link: '#1a73e8' }
+        : theme === 'dark'
+          ? { bg: '#2a2a2e', fg: '#e0e0e0', link: '#6cb6ff' }
+          : { bg: '#0c0c0e', fg: '#d0d0d0', link: '#6cb6ff' } // ultraDark
+    const { bg, fg, link: linkColor } = colors
+    shadow.innerHTML = `<style>
+:host { display: block; }
+div { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px; line-height: 1.75; color: ${fg}; background: ${bg};
+  word-wrap: break-word; overflow-wrap: break-word; }
+img { max-width: 100%; height: auto; }
+a { color: ${linkColor}; }
+</style><div>${sanitizeHtml(html)}</div>`
+  }, [html, theme])
+
+  return <div ref={hostRef} className={styles.bodyHtml} />
+}
+
 interface EmailDetailProps {
   accounts: Account[]
   /** The selected message from the list, used to find the thread's account. */
@@ -191,10 +228,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
 
       <div className={styles.body}>
         {message.body_html ? (
-          <div
-            className={styles.bodyHtml}
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.body_html) }}
-          />
+          <ShadowHtml html={message.body_html} theme={theme} />
         ) : message.body_text ? (
           <div className={styles.bodyText}>{message.body_text}</div>
         ) : (

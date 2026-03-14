@@ -136,19 +136,15 @@
   color: var(--text-primary);
   line-height: 1.75;
   font-size: 13px;
-}
-
-.bodyHtml {
-  color: var(--text-primary);
-  line-height: 1.75;
-  font-size: 13px;
+  white-space: pre-wrap;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
 
-.bodyHtml img {
-  max-width: 100%;
-  height: auto;
+.bodyHtml {
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 /* ── Actions ── */
