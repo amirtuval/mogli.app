@@ -35,6 +35,7 @@ fn create_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new().commands(collect_commands![
         commands::auth::add_account,
         commands::auth::remove_account,
+        commands::auth::reauth_account,
         commands::auth::list_accounts,
         commands::auth::load_theme,
         commands::auth::save_theme,

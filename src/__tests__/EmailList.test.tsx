@@ -6,13 +6,21 @@ import { useUIStore } from '../store/uiStore'
 import EmailList from '../components/EmailList'
 
 const MOCK_ACCOUNTS: Account[] = [
-  { id: 'a1', email: 'work@test.com', display_name: 'Work', color: '#4f9cf9', history_id: '' },
+  {
+    id: 'a1',
+    email: 'work@test.com',
+    display_name: 'Work',
+    color: '#4f9cf9',
+    history_id: '',
+    auth_expired: false,
+  },
   {
     id: 'a2',
     email: 'personal@test.com',
     display_name: 'Personal',
     color: '#f97316',
     history_id: '',
+    auth_expired: false,
   },
 ]
 

@@ -19,6 +19,7 @@ pub async fn add_account(app: AppHandle) -> Result<Account, String> {
         display_name: result.display_name,
         color: color_for_index(count),
         history_id: String::new(),
+        auth_expired: false,
     };
 
     store::add_account(&app, account.clone())?;
@@ -47,6 +48,30 @@ pub async fn remove_account(app: AppHandle, account_id: String) -> Result<(), St
     }
 
     store::remove_account(&app, &account_id)?;
+    Ok(())
+}
+
+/// Re-authenticate an account with expired/revoked tokens.
+/// Re-runs the OAuth flow and clears the `auth_expired` flag on success.
+#[tauri::command]
+#[specta::specta]
+pub async fn reauth_account(app: AppHandle, account_id: String) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let result = oauth::run_oauth_flow(&creds).await?;
+
+    // Verify the user authenticated with the same email
+    let expected_email = store::account_email(&app, &account_id)?;
+    if result.email != expected_email {
+        // Delete the tokens we just stored for the wrong account
+        let _ = keychain::delete_tokens(&result.email);
+        return Err(format!(
+            "Please sign in with {} (got {})",
+            expected_email, result.email
+        ));
+    }
+
+    // Clear the auth_expired flag
+    store::set_auth_expired(&app, &account_id, false)?;
     Ok(())
 }
 

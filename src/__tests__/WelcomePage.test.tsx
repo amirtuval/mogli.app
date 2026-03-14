@@ -42,6 +42,7 @@ describe('WelcomePage', () => {
       display_name: 'Test User',
       color: '#4f9cf9',
       history_id: '',
+      auth_expired: false,
     }
     mockedInvoke.mockResolvedValueOnce(mockAccount)
 
@@ -62,6 +63,7 @@ describe('WelcomePage', () => {
       display_name: 'Test User',
       color: '#4f9cf9',
       history_id: '',
+      auth_expired: false,
     }
     mockedInvoke.mockResolvedValueOnce(mockAccount)
 
@@ -85,6 +87,7 @@ describe('WelcomePage', () => {
       display_name: 'Test User',
       color: '#4f9cf9',
       history_id: '',
+      auth_expired: false,
     }
     mockedInvoke.mockResolvedValueOnce(mockAccount)
 

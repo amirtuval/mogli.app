@@ -9,6 +9,10 @@ pub struct Account {
     pub display_name: String,
     pub color: String,
     pub history_id: String,
+    /// Whether this account's OAuth token has expired or been revoked.
+    /// Skipped in background sync/reminders until re-authenticated.
+    #[serde(default)]
+    pub auth_expired: bool,
 }
 
 /// A single Google Calendar within an account.
@@ -147,12 +151,23 @@ mod tests {
             display_name: "Test User".to_string(),
             color: "#4f9cf9".to_string(),
             history_id: "12345".to_string(),
+            auth_expired: false,
         };
         let json = serde_json::to_string(&account).unwrap();
         let parsed: Account = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, "test-id");
         assert_eq!(parsed.email, "user@example.com");
         assert_eq!(parsed.color, "#4f9cf9");
+        assert!(!parsed.auth_expired);
+    }
+
+    #[test]
+    fn test_account_auth_expired_defaults_false() {
+        // Simulate loading a legacy account JSON without the auth_expired field
+        let json =
+            r##"{"id":"x","email":"a@b.com","display_name":"A","color":"#000","history_id":""}"##;
+        let parsed: Account = serde_json::from_str(json).unwrap();
+        assert!(!parsed.auth_expired);
     }
 
     #[test]

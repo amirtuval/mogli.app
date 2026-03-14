@@ -8,8 +8,10 @@ use tokio::time::interval;
 
 use crate::google::calendar as calendar_api;
 use crate::google::oauth::OAuthCredentials;
+use crate::keychain;
 use crate::models::ReminderPayload;
 use crate::store::{self, AccountStore};
+use crate::sync::is_auth_error;
 
 const REMINDER_CHECK_SECS: u64 = 60;
 const REMINDER_WINDOW_SECS: i64 = 600; // 10 minutes
@@ -102,11 +104,27 @@ async fn check_upcoming_events(app: &AppHandle) {
     };
 
     for account in &accounts {
-        check_account_events(app, &creds, account, &enabled_state, now, time_max).await;
+        // Skip accounts with expired/revoked tokens
+        if account.auth_expired {
+            continue;
+        }
+        if let Err(e) =
+            check_account_events(app, &creds, account, &enabled_state, now, time_max).await
+            && is_auth_error(&e)
+        {
+            warn!(
+                "Calendar reminders: auth failed for {}, marking account: {e}",
+                account.email
+            );
+            let _ = store::set_auth_expired(app, &account.id, true);
+            let _ = keychain::delete_tokens(&account.email);
+            let _ = app.emit("account:auth_expired", &account.id);
+        }
     }
 }
 
 /// Check a single account's calendars for upcoming events and fire reminders.
+/// Returns `Err` for auth-related failures so the caller can mark the account.
 async fn check_account_events(
     app: &AppHandle,
     creds: &OAuthCredentials,
@@ -114,7 +132,7 @@ async fn check_account_events(
     enabled_state: &std::collections::HashMap<String, bool>,
     now: i64,
     time_max: i64,
-) {
+) -> Result<(), String> {
     let calendars = match calendar_api::fetch_calendars(creds, &account.id, &account.email).await {
         Ok(c) => c,
         Err(e) => {
@@ -122,7 +140,7 @@ async fn check_account_events(
                 "Calendar reminders: failed to fetch calendars for {}: {e}",
                 account.email
             );
-            return;
+            return if is_auth_error(&e) { Err(e) } else { Ok(()) };
         }
     };
 
@@ -151,6 +169,9 @@ async fn check_account_events(
                     "Calendar reminders: failed to fetch events for {}/{}: {e}",
                     account.email, cal.name
                 );
+                if is_auth_error(&e) {
+                    return Err(e);
+                }
                 continue;
             }
         };
@@ -201,6 +222,8 @@ async fn check_account_events(
             show_reminder_window(app);
         }
     }
+
+    Ok(())
 }
 
 /// Open the always-on-top reminder popup window, or focus it if it already
