@@ -232,18 +232,28 @@ fn parse_full_message(msg: &GmailMessage) -> Message {
 // --- Public API functions ---
 
 /// Fetch message metadata for a single account.
+///
+/// `labels` contains one or more Gmail label IDs that are sent as `labelIds`
+/// query parameters. Gmail returns only messages that have **all** of the
+/// specified labels, so passing `["INBOX", "UNREAD"]` returns only unread
+/// inbox messages.
 pub async fn fetch_messages(
     creds: &OAuthCredentials,
     account_id: &str,
     email: &str,
-    label: &str,
+    labels: &[String],
     page_token: Option<&str>,
 ) -> Result<Vec<MessageMeta>, String> {
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
 
-    // List message IDs
-    let mut url = format!("{GMAIL_BASE_URL}/users/me/messages?labelIds={label}&maxResults=50");
+    // List message IDs — each label becomes a separate labelIds param
+    let label_params: String = labels
+        .iter()
+        .map(|l| format!("labelIds={l}"))
+        .collect::<Vec<_>>()
+        .join("&");
+    let mut url = format!("{GMAIL_BASE_URL}/users/me/messages?{label_params}&maxResults=50");
     if let Some(pt) = page_token {
         let _ = write!(url, "&pageToken={pt}");
     }

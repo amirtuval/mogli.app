@@ -189,7 +189,7 @@ describe('EmailList', () => {
     expect(screen.getByText('Starred')).toBeInTheDocument()
   })
 
-  it('should filter to unread messages when Unread chip is clicked', async () => {
+  it('should toggle mailFilter.unread in the store when Unread chip is clicked', async () => {
     const user = userEvent.setup()
     render(
       <EmailList
@@ -199,16 +199,17 @@ describe('EmailList', () => {
         selectedLabel="INBOX"
       />,
     )
+
+    // Filter is off initially
+    expect(useUIStore.getState().mailFilter.unread).toBe(false)
 
     await user.click(screen.getByText('Unread'))
 
-    // Alice is unread, Bob is not
-    expect(screen.getByText('Alice')).toBeInTheDocument()
-    expect(screen.queryByText('Bob')).not.toBeInTheDocument()
-    expect(screen.getByText('1 of 2 threads · Inbox')).toBeInTheDocument()
+    // Clicking the chip toggles the store flag (server-side filter via query key)
+    expect(useUIStore.getState().mailFilter.unread).toBe(true)
   })
 
-  it('should filter to starred messages when Starred chip is clicked', async () => {
+  it('should toggle mailFilter.starred in the store when Starred chip is clicked', async () => {
     const user = userEvent.setup()
     render(
       <EmailList
@@ -219,12 +220,13 @@ describe('EmailList', () => {
       />,
     )
 
+    // Filter is off initially
+    expect(useUIStore.getState().mailFilter.starred).toBe(false)
+
     await user.click(screen.getByText('Starred'))
 
-    // Bob is starred, Alice is not
-    expect(screen.getByText('Bob')).toBeInTheDocument()
-    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
-    expect(screen.getByText('1 of 2 threads · Inbox')).toBeInTheDocument()
+    // Clicking the chip toggles the store flag (server-side filter via query key)
+    expect(useUIStore.getState().mailFilter.starred).toBe(true)
   })
 
   it('should deduplicate messages by thread_id showing one row per thread', () => {
@@ -285,8 +287,7 @@ describe('EmailList', () => {
     expect(screen.queryByText('Alice')).not.toBeInTheDocument()
   })
 
-  it('should show thread as unread if any message in thread is unread', async () => {
-    const user = userEvent.setup()
+  it('should show thread as unread if any message in thread is unread', () => {
     const threadedMessages: MessageMeta[] = [
       {
         id: 'm1',
@@ -327,38 +328,18 @@ describe('EmailList', () => {
     const unreadDots = container.querySelectorAll('[class*="unreadDot"]')
     expect(unreadDots.length).toBe(1)
 
-    // Thread should appear when Unread filter is active
-    await user.click(screen.getByText('Unread'))
+    // Thread row should show the newest message (Bob) with unread styling
     expect(screen.getByText('Bob')).toBeInTheDocument()
   })
 
-  it('should show "No matching messages" when filter matches nothing', async () => {
-    const user = userEvent.setup()
-    const readMessages: MessageMeta[] = [
-      {
-        id: 'm1',
-        thread_id: 't1',
-        account_id: 'a1',
-        from: 'Alice',
-        subject: 'Hello',
-        snippet: 'Hey there...',
-        date: Math.floor(Date.now() / 1000) - 300,
-        unread: false,
-        starred: false,
-        labels: ['INBOX'],
-      },
-    ]
+  it('should show "No matching messages" when filter is active and server returns no results', () => {
+    // Pre-set filter in store (simulates user having clicked Unread)
+    useUIStore.setState({ mailFilter: { unread: true, starred: false } })
 
     render(
-      <EmailList
-        messages={readMessages}
-        accounts={MOCK_ACCOUNTS}
-        isLoading={false}
-        selectedLabel="INBOX"
-      />,
+      <EmailList messages={[]} accounts={MOCK_ACCOUNTS} isLoading={false} selectedLabel="INBOX" />,
     )
 
-    await user.click(screen.getByText('Unread'))
     expect(screen.getByText('No matching messages')).toBeInTheDocument()
   })
 
