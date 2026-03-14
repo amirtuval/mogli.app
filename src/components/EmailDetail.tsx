@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -17,6 +17,27 @@ function sanitizeHtml(html: string): string {
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
     .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
+}
+
+/**
+ * Build a full HTML document for the iframe srcdoc.
+ * Wraps the email HTML in a document that:
+ * - Matches the app's current theme (background & text color)
+ * - Resets margins/padding for seamless embedding
+ * - Opens links in the system browser via target="_blank"
+ */
+function buildSrcdoc(html: string, isDark: boolean): string {
+  const bg = isDark ? '#1e1e2e' : '#ffffff'
+  const fg = isDark ? '#e0e0e0' : '#1a1a1a'
+  const sanitized = sanitizeHtml(html)
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><base target="_blank"><style>
+html, body { margin: 0; padding: 0; background: ${bg}; color: ${fg};
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px; line-height: 1.75; word-wrap: break-word; overflow-wrap: break-word; }
+img { max-width: 100%; height: auto; }
+a { color: ${isDark ? '#6cb6ff' : '#1a73e8'}; }
+</style></head><body>${sanitized}</body></html>`
 }
 
 interface EmailDetailProps {
@@ -61,6 +82,19 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
       }
     }
   }, [autoMarkRead, selectedMessage?.unread, accountId, selectedThreadId, queryClient])
+
+  /** Auto-resize iframe to fit its content so the outer container scrolls instead. */
+  const handleIframeLoad = useCallback((e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    const iframe = e.currentTarget
+    try {
+      const doc = iframe.contentDocument
+      if (doc?.body) {
+        iframe.style.height = `${doc.body.scrollHeight}px`
+      }
+    } catch {
+      // sandbox may block cross-origin access — ignore
+    }
+  }, [])
 
   const handleMarkReadUnread = async () => {
     if (!accountId || !selectedThreadId || !selectedMessage) return
@@ -191,9 +225,12 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
 
       <div className={styles.body}>
         {message.body_html ? (
-          <div
+          <iframe
             className={styles.bodyHtml}
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(message.body_html) }}
+            sandbox="allow-same-origin"
+            srcDoc={buildSrcdoc(message.body_html, theme !== 'light')}
+            title="Email content"
+            onLoad={handleIframeLoad}
           />
         ) : message.body_text ? (
           <div className={styles.bodyText}>{message.body_text}</div>

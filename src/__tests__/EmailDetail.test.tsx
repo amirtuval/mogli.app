@@ -76,7 +76,11 @@ describe('EmailDetail', () => {
   })
 
   it('should render subject, from, and body when thread loaded', async () => {
-    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD)
+    const textOnlyThread = {
+      ...MOCK_THREAD,
+      messages: [{ ...MOCK_THREAD.messages[0], body_html: null }],
+    }
+    mockedInvoke.mockResolvedValueOnce(textOnlyThread)
 
     renderWithQuery(
       <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
@@ -88,6 +92,42 @@ describe('EmailDetail', () => {
 
     expect(screen.getByText('Alice Sender')).toBeInTheDocument()
     expect(screen.getByText('Hello from Alice')).toBeInTheDocument()
+  })
+
+  it('should render HTML email in an iframe with srcdoc', async () => {
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD)
+
+    renderWithQuery(
+      <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Email content')).toBeInTheDocument()
+    })
+
+    const iframe = screen.getByTitle('Email content') as HTMLIFrameElement
+    expect(iframe.tagName).toBe('IFRAME')
+    expect(iframe.getAttribute('sandbox')).toBe('allow-same-origin')
+    expect(iframe.getAttribute('srcdoc')).toContain('Hello from Alice')
+  })
+
+  it('should render plain text email with newlines preserved', async () => {
+    const textOnlyThread = {
+      ...MOCK_THREAD,
+      messages: [{ ...MOCK_THREAD.messages[0], body_html: null, body_text: 'Line 1\nLine 2' }],
+    }
+    mockedInvoke.mockResolvedValueOnce(textOnlyThread)
+
+    renderWithQuery(
+      <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/Line 1/)).toBeInTheDocument()
+    })
+
+    const el = screen.getByText(/Line 1/)
+    expect(el.textContent).toBe('Line 1\nLine 2')
   })
 
   it('should show account tag pill with correct name', async () => {
