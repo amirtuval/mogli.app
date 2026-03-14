@@ -151,6 +151,14 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // A second instance tried to launch — focus the existing window instead.
+            if let Some(window) = app.webview_windows().values().next() {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .manage(AccountStore::new())
         .manage(NotifiedEvents::new())
         .manage(ActiveReminders::new())
