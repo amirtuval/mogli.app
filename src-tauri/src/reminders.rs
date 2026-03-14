@@ -236,11 +236,12 @@ pub fn show_reminder_window(app: &AppHandle) {
     const WIDTH: i32 = 380;
     const HEIGHT: i32 = 360;
 
-    // If the window already exists, just show + focus it
+    // If the window already exists, just make sure it's visible.
+    // Don't call set_focus() — the window is always-on-top so the user
+    // will see it, but we shouldn't steal focus from their current task.
     if let Some(win) = app.webview_windows().get(LABEL) {
         let _ = win.show();
         let _ = win.unminimize();
-        let _ = win.set_focus();
         return;
     }
 
@@ -256,7 +257,7 @@ pub fn show_reminder_window(app: &AppHandle) {
         .always_on_top(true)
         .skip_taskbar(true)
         .visible(true)
-        .focused(true)
+        .focused(false)
         .build()
     {
         Ok(win) => {
