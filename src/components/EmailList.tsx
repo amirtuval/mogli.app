@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { formatDistanceToNow, isToday, isYesterday, format } from 'date-fns'
 import type { Account, MessageMeta } from '../types/models'
 import { useUIStore } from '../store/uiStore'
@@ -51,6 +51,16 @@ export default function EmailList({
   const setSelectedThreadId = useUIStore((s) => s.setSelectedThreadId)
   const mailFilter = useUIStore((s) => s.mailFilter)
   const toggleMailFilter = useUIStore((s) => s.toggleMailFilter)
+  const selectedThreadIds = useUIStore((s) => s.selectedThreadIds)
+  const toggleThreadSelection = useUIStore((s) => s.toggleThreadSelection)
+  const selectAllThreads = useUIStore((s) => s.selectAllThreads)
+  const clearSelection = useUIStore((s) => s.clearSelection)
+  const lastSelectedThreadId = useUIStore((s) => s.lastSelectedThreadId)
+
+  const hasSelection = selectedThreadIds.size > 0
+
+  /** Ref to track the last shift-click anchor for range selection */
+  const shiftAnchorRef = useRef<string | null>(null)
 
   const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
 
@@ -111,6 +121,52 @@ export default function EmailList({
     })
   }, [threadMessages, mailFilter, isFiltered])
 
+  const handleCheckboxClick = useCallback(
+    (threadId: string, e: React.MouseEvent) => {
+      e.stopPropagation()
+
+      if (e.shiftKey && lastSelectedThreadId && filteredMessages) {
+        // Range select: select all threads between last selected and current
+        const ids = filteredMessages.map((m) => m.thread_id)
+        const lastIdx = ids.indexOf(lastSelectedThreadId)
+        const currIdx = ids.indexOf(threadId)
+        if (lastIdx !== -1 && currIdx !== -1) {
+          const start = Math.min(lastIdx, currIdx)
+          const end = Math.max(lastIdx, currIdx)
+          const rangeIds = ids.slice(start, end + 1)
+          const next = new Set(selectedThreadIds)
+          for (const id of rangeIds) {
+            next.add(id)
+          }
+          selectAllThreads([...next])
+          return
+        }
+      }
+
+      toggleThreadSelection(threadId)
+      shiftAnchorRef.current = threadId
+    },
+    [
+      lastSelectedThreadId,
+      filteredMessages,
+      selectedThreadIds,
+      selectAllThreads,
+      toggleThreadSelection,
+    ],
+  )
+
+  const handleRowClick = useCallback(
+    (threadId: string) => {
+      if (hasSelection) {
+        // When in selection mode, clicking the row toggles selection
+        toggleThreadSelection(threadId)
+      } else {
+        setSelectedThreadId(threadId)
+      }
+    },
+    [hasSelection, toggleThreadSelection, setSelectedThreadId],
+  )
+
   if (isLoading) {
     return (
       <div className={styles.container}>
@@ -126,30 +182,58 @@ export default function EmailList({
   const displayMessages = filteredMessages ?? []
   const displayCount = displayMessages.length
 
-  const headerText = searchQuery
-    ? `${displayCount} results · "${searchQuery}"`
-    : isFiltered
-      ? `${displayCount} of ${totalCount} threads · ${labelName}`
-      : `${totalCount} threads · ${labelName}`
+  const allSelected =
+    displayCount > 0 && displayMessages.every((m) => selectedThreadIds.has(m.thread_id))
+  const someSelected = hasSelection && !allSelected
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      clearSelection()
+    } else {
+      selectAllThreads(displayMessages.map((m) => m.thread_id))
+    }
+  }
+
+  const headerText = hasSelection
+    ? `${selectedThreadIds.size} selected`
+    : searchQuery
+      ? `${displayCount} results · "${searchQuery}"`
+      : isFiltered
+        ? `${displayCount} of ${totalCount} threads · ${labelName}`
+        : `${totalCount} threads · ${labelName}`
 
   return (
     <div className={styles.container}>
       <div className={styles.header}>
+        {displayCount > 0 && (
+          <label className={styles.selectAllCheckbox} onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected
+              }}
+              onChange={handleSelectAll}
+            />
+          </label>
+        )}
         <span className={styles.headerInfo}>{headerText}</span>
-        <div className={styles.filterChips}>
-          <button
-            className={`${styles.filterChip} ${mailFilter.unread ? styles.filterChipActive : ''}`}
-            onClick={() => toggleMailFilter('unread')}
-          >
-            Unread
-          </button>
-          <button
-            className={`${styles.filterChip} ${mailFilter.starred ? styles.filterChipActive : ''}`}
-            onClick={() => toggleMailFilter('starred')}
-          >
-            Starred
-          </button>
-        </div>
+        {!hasSelection && (
+          <div className={styles.filterChips}>
+            <button
+              className={`${styles.filterChip} ${mailFilter.unread ? styles.filterChipActive : ''}`}
+              onClick={() => toggleMailFilter('unread')}
+            >
+              Unread
+            </button>
+            <button
+              className={`${styles.filterChip} ${mailFilter.starred ? styles.filterChipActive : ''}`}
+              onClick={() => toggleMailFilter('starred')}
+            >
+              Starred
+            </button>
+          </div>
+        )}
       </div>
 
       {displayCount === 0 ? (
@@ -161,17 +245,29 @@ export default function EmailList({
         displayMessages.map((email) => {
           const acct = accountMap.get(email.account_id)
           const isSelected = selectedThreadId === email.thread_id
+          const isChecked = selectedThreadIds.has(email.thread_id)
           const borderColor = acct?.color ?? '#666'
 
           return (
             <div
               key={email.thread_id}
-              className={`${styles.row} ${isSelected ? styles.rowSelected : ''}`}
+              className={`${styles.row} ${isSelected && !hasSelection ? styles.rowSelected : ''} ${isChecked ? styles.rowChecked : ''}`}
               style={{
-                borderLeft: `2.5px solid ${isSelected ? borderColor : borderColor + '44'}`,
+                borderLeft: `2.5px solid ${isSelected && !hasSelection ? borderColor : borderColor + '44'}`,
               }}
-              onClick={() => setSelectedThreadId(email.thread_id)}
+              onClick={() => handleRowClick(email.thread_id)}
             >
+              <label
+                className={`${styles.checkbox} ${hasSelection ? styles.checkboxVisible : ''}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => {}}
+                  onClick={(e) => handleCheckboxClick(email.thread_id, e as React.MouseEvent)}
+                />
+              </label>
               <div className={styles.rowContent}>
                 <div className={styles.senderLine}>
                   <span className={`${styles.sender} ${email.unread ? styles.senderUnread : ''}`}>

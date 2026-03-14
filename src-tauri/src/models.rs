@@ -15,6 +15,13 @@ pub struct Account {
     pub auth_expired: bool,
 }
 
+/// An item in a batch modify request (account + thread pair).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct BatchModifyItem {
+    pub account_id: String,
+    pub thread_id: String,
+}
+
 /// A single Google Calendar within an account.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct Calendar {

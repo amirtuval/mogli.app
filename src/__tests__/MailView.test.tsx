@@ -65,6 +65,8 @@ describe('MailView', () => {
       selectedLabel: 'INBOX',
       selectedThreadId: null,
       activeAccounts: ['a1'],
+      selectedThreadIds: new Set<string>(),
+      lastSelectedThreadId: null,
     })
   })
 
@@ -99,5 +101,35 @@ describe('MailView', () => {
     renderMailView({ messages: [] })
 
     expect(screen.getByText('No messages')).toBeInTheDocument()
+  })
+
+  it('should not show bulk action bar when no threads are selected', () => {
+    renderMailView()
+
+    expect(screen.queryByText('✓ Mark read')).not.toBeInTheDocument()
+    expect(screen.queryByText('○ Mark unread')).not.toBeInTheDocument()
+    expect(screen.queryByText('Archive')).not.toBeInTheDocument()
+  })
+
+  it('should show bulk action bar when threads are selected', () => {
+    useUIStore.setState({ selectedThreadIds: new Set(['t1']) })
+    renderMailView()
+
+    expect(screen.getByText('✓ Mark read')).toBeInTheDocument()
+    expect(screen.getByText('○ Mark unread')).toBeInTheDocument()
+    expect(screen.getByText('Archive')).toBeInTheDocument()
+    expect(screen.getByText('Cancel')).toBeInTheDocument()
+  })
+
+  it('should clear selection when Cancel is clicked in bulk bar', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event')
+    const user = userEvent.setup()
+
+    useUIStore.setState({ selectedThreadIds: new Set(['t1', 't2']) })
+    renderMailView()
+
+    await user.click(screen.getByText('Cancel'))
+
+    expect(useUIStore.getState().selectedThreadIds.size).toBe(0)
   })
 })

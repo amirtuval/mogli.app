@@ -20,6 +20,8 @@ describe('uiStore', () => {
       autoMarkRead: false,
       showCompose: false,
       composeContext: null,
+      selectedThreadIds: new Set<string>(),
+      lastSelectedThreadId: null,
     })
   })
 
@@ -261,6 +263,41 @@ describe('calendar view mode', () => {
   it('should set calendar view date', () => {
     useUIStore.getState().setCalendarViewDate('2026-06-15')
     expect(useUIStore.getState().calendarViewDate).toBe('2026-06-15')
+  })
+
+  it('should toggle thread selection', () => {
+    useUIStore.getState().toggleThreadSelection('t1')
+    expect(useUIStore.getState().selectedThreadIds.has('t1')).toBe(true)
+    expect(useUIStore.getState().lastSelectedThreadId).toBe('t1')
+
+    useUIStore.getState().toggleThreadSelection('t2')
+    expect(useUIStore.getState().selectedThreadIds.size).toBe(2)
+
+    // Toggle off
+    useUIStore.getState().toggleThreadSelection('t1')
+    expect(useUIStore.getState().selectedThreadIds.has('t1')).toBe(false)
+    expect(useUIStore.getState().selectedThreadIds.has('t2')).toBe(true)
+  })
+
+  it('should select all threads', () => {
+    useUIStore.getState().selectAllThreads(['t1', 't2', 't3'])
+    expect(useUIStore.getState().selectedThreadIds.size).toBe(3)
+    expect(useUIStore.getState().lastSelectedThreadId).toBeNull()
+  })
+
+  it('should clear selection', () => {
+    useUIStore.getState().selectAllThreads(['t1', 't2'])
+    expect(useUIStore.getState().selectedThreadIds.size).toBe(2)
+
+    useUIStore.getState().clearSelection()
+    expect(useUIStore.getState().selectedThreadIds.size).toBe(0)
+    expect(useUIStore.getState().lastSelectedThreadId).toBeNull()
+  })
+
+  it('should initialize with empty selection', () => {
+    const state = useUIStore.getState()
+    expect(state.selectedThreadIds.size).toBe(0)
+    expect(state.lastSelectedThreadId).toBeNull()
   })
 })
 
