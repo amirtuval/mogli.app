@@ -316,6 +316,7 @@ export default function CalendarView({
         allDay: ev.all_day || ev.end - ev.start >= 86400,
         location: ev.location ?? undefined,
         description: ev.description ?? undefined,
+        conferenceUrl: ev.conference_url ?? undefined,
         recurrence: 'none',
         reminders: [],
       })

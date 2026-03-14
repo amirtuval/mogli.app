@@ -588,6 +588,27 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             )}
           </div>
 
+          {/* Conference link (read-only, edit mode only) */}
+          {isEdit && initial.conferenceUrl && (
+            <div className={styles.field}>
+              <span className={styles.label}>Video call</span>
+              <div className={styles.readonlyValue}>
+                <a
+                  href={initial.conferenceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.linkInline}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    void shellOpen(initial.conferenceUrl!)
+                  }}
+                >
+                  ▶ Join video call
+                </a>
+              </div>
+            </div>
+          )}
+
           {/* Description (collapsible) */}
           {!showDesc ? (
             <button type="button" className={styles.descToggle} onClick={() => setShowDesc(true)}>
