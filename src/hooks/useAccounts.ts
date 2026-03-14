@@ -41,6 +41,9 @@ export function useReauthAccount() {
     mutationFn: (accountId: string) => invoke<void>('reauth_account', { accountId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['messages'] })
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+      queryClient.invalidateQueries({ queryKey: ['calendars'] })
     },
   })
 }

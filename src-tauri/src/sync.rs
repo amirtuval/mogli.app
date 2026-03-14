@@ -9,6 +9,16 @@ use crate::google::oauth::OAuthCredentials;
 use crate::keychain;
 use crate::store::{self, AccountStore};
 
+/// Check if an error string indicates an authentication/authorization failure
+/// that should mark the account as needing re-authentication.
+pub fn is_auth_error(error: &str) -> bool {
+    error.starts_with("AUTH_EXPIRED:")
+        || error.contains("invalid_grant")
+        || error.contains("UNAUTHENTICATED")
+        || error.contains("Invalid Credentials")
+        || error.contains("Keychain retrieve error")
+}
+
 /// Fast notification pipe — polls `history.list` every 15 seconds.
 /// Lightweight: only checks whether new messages exist, then fires
 /// OS notifications and emits `mail:new` so the frontend refreshes.
@@ -82,9 +92,9 @@ async fn check_all_accounts(app: &AppHandle) {
                     found_new = true;
                 }
             }
-            Err(e) if e.starts_with("AUTH_EXPIRED:") => {
+            Err(e) if is_auth_error(&e) => {
                 warn!(
-                    "Background sync: token expired/revoked for {}, marking account",
+                    "Background sync: auth failed for {}, marking account: {e}",
                     account.email
                 );
                 let _ = store::set_auth_expired(app, &account.id, true);
@@ -204,5 +214,48 @@ async fn notify_new_messages(
         ) {
             warn!("Failed to emit open_thread event: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_auth_error_sentinel() {
+        assert!(is_auth_error("AUTH_EXPIRED:user@example.com"));
+    }
+
+    #[test]
+    fn test_is_auth_error_invalid_grant() {
+        assert!(is_auth_error("Token refresh failed: invalid_grant"));
+    }
+
+    #[test]
+    fn test_is_auth_error_unauthenticated() {
+        assert!(is_auth_error(
+            r#"Gmail history.list failed: {"error":{"status":"UNAUTHENTICATED"}}"#
+        ));
+    }
+
+    #[test]
+    fn test_is_auth_error_invalid_credentials() {
+        assert!(is_auth_error(
+            r#"Gmail history.list failed: {"error":{"errors":[{"message":"Invalid Credentials"}]}}"#
+        ));
+    }
+
+    #[test]
+    fn test_is_auth_error_keychain() {
+        assert!(is_auth_error("Keychain retrieve error: item not found"));
+    }
+
+    #[test]
+    fn test_is_not_auth_error() {
+        assert!(!is_auth_error("Network timeout"));
+        assert!(!is_auth_error(
+            "Gmail history.list failed: 500 Internal Server Error"
+        ));
+        assert!(!is_auth_error(""));
     }
 }

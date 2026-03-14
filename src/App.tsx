@@ -54,9 +54,19 @@ function AppShell() {
   const showEventModal = useUIStore((s) => s.showEventModal)
 
   const { data: accounts = [] } = useAccounts()
-  const { data: messages, isLoading: messagesLoading } = useMessages(activeAccounts, selectedLabel)
+
+  // Filter out expired accounts so data hooks don't try to fetch with revoked tokens
+  const healthyAccountIds = useMemo(
+    () => activeAccounts.filter((id) => !accounts.find((a) => a.id === id)?.auth_expired),
+    [activeAccounts, accounts],
+  )
+
+  const { data: messages, isLoading: messagesLoading } = useMessages(
+    healthyAccountIds,
+    selectedLabel,
+  )
   const { data: searchResults, isLoading: searchLoading } = useSearchMessages(
-    activeAccounts,
+    healthyAccountIds,
     searchQuery,
   )
 
@@ -65,7 +75,7 @@ function AppShell() {
   const activeMessagesLoading = searchQuery ? searchLoading : messagesLoading
 
   // Fetch calendars for all active accounts
-  const { data: calendars = [] } = useAllCalendars(activeAccounts)
+  const { data: calendars = [] } = useAllCalendars(healthyAccountIds)
 
   // Compute enabled calendar IDs for event fetching
   const enabledCalendarIds = useMemo(
@@ -79,7 +89,7 @@ function AppShell() {
     isLoading: eventsLoading,
     isFetching: eventsFetching,
   } = useEvents(
-    activeAccounts,
+    healthyAccountIds,
     enabledCalendarIds,
     calendarWeekStart,
     calendarViewMode,

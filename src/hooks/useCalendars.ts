@@ -14,10 +14,10 @@ export function useAllCalendars(accountIds: string[]) {
   return useQuery<Calendar[]>({
     queryKey: ['calendars', 'all', accountIds],
     queryFn: async () => {
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         accountIds.map((accountId) => invoke<Calendar[]>('list_calendars', { accountId })),
       )
-      return results.flat()
+      return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
     },
     enabled: accountIds.length > 0,
     refetchInterval: 1000 * 60 * 2, // 2 minutes
