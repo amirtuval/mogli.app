@@ -27,26 +27,6 @@ struct MessageRef {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ListThreadsResponse {
-    threads: Option<Vec<ThreadRef>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ThreadRef {
-    id: String,
-}
-
-/// Response from threads.get with format=metadata.
-/// Contains all messages in the thread with their headers and labels.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct MetadataThread {
-    messages: Option<Vec<GmailMessage>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct GmailMessage {
     id: String,
     thread_id: String,
@@ -251,50 +231,7 @@ fn parse_full_message(msg: &GmailMessage) -> Message {
 
 // --- Public API functions ---
 
-/// Build a `MessageMeta` for a thread from its metadata response.
-///
-/// Uses the latest message for display fields (from, subject, date, snippet)
-/// and OR-aggregates `unread` and `starred` across all messages in the thread
-/// so that a thread with *any* unread message is correctly marked as unread.
-fn parse_thread_meta(thread: &MetadataThread, account_id: &str) -> Option<MessageMeta> {
-    let messages = thread.messages.as_ref()?;
-    if messages.is_empty() {
-        return None;
-    }
-
-    // Find the latest message by internal_date
-    let latest = messages
-        .iter()
-        .max_by_key(|m| {
-            m.internal_date
-                .as_deref()
-                .and_then(|d| d.parse::<i64>().ok())
-                .unwrap_or(0)
-        })
-        .unwrap(); // safe: we checked non-empty above
-
-    let mut meta = parse_message_meta(latest, account_id);
-
-    // OR-aggregate unread/starred across all messages in the thread
-    for msg in messages {
-        let labels = msg.label_ids.as_deref().unwrap_or_default();
-        if labels.iter().any(|l| l == "UNREAD") {
-            meta.unread = true;
-        }
-        if labels.iter().any(|l| l == "STARRED") {
-            meta.starred = true;
-        }
-    }
-
-    Some(meta)
-}
-
-/// Fetch thread metadata for a single account.
-///
-/// Uses `threads.list` instead of `messages.list` so that `maxResults=50`
-/// returns 50 **threads** (not 50 individual messages that may belong to
-/// fewer threads). For each thread, fetches all messages' metadata to
-/// correctly aggregate unread/starred flags across the entire thread.
+/// Fetch message metadata for a single account.
 pub async fn fetch_messages(
     creds: &OAuthCredentials,
     account_id: &str,
@@ -305,8 +242,8 @@ pub async fn fetch_messages(
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
 
-    // List thread IDs
-    let mut url = format!("{GMAIL_BASE_URL}/users/me/threads?labelIds={label}&maxResults=50");
+    // List message IDs
+    let mut url = format!("{GMAIL_BASE_URL}/users/me/messages?labelIds={label}&maxResults=50");
     if let Some(pt) = page_token {
         let _ = write!(url, "&pageToken={pt}");
     }
@@ -316,54 +253,50 @@ pub async fn fetch_messages(
         .bearer_auth(&token)
         .send()
         .await
-        .map_err(|e| format!("Gmail threads.list request failed: {e}"))?;
+        .map_err(|e| format!("Gmail list request failed: {e}"))?;
 
     if !list_resp.status().is_success() {
         let body = list_resp.text().await.unwrap_or_default();
-        return Err(format!("Gmail threads.list failed: {body}"));
+        return Err(format!("Gmail list failed: {body}"));
     }
 
-    let list_data: ListThreadsResponse = list_resp
+    let list_data: ListMessagesResponse = list_resp
         .json()
         .await
-        .map_err(|e| format!("Failed to parse thread list: {e}"))?;
+        .map_err(|e| format!("Failed to parse message list: {e}"))?;
 
-    let thread_refs = list_data.threads.unwrap_or_default();
-    if thread_refs.is_empty() {
+    let msg_refs = list_data.messages.unwrap_or_default();
+    if msg_refs.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Fetch metadata for each thread in parallel
+    // Fetch metadata for all messages in parallel
     let mut join_set = tokio::task::JoinSet::new();
-    for thread_ref in thread_refs {
+    for msg_ref in msg_refs {
         let client = client.clone();
         let token = token.clone();
         let account_id = account_id.to_string();
-        let thread_id = thread_ref.id;
+        let msg_id = msg_ref.id;
         join_set.spawn(async move {
-            let thread_url = format!(
-                "{GMAIL_BASE_URL}/users/me/threads/{thread_id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
+            let msg_url = format!(
+                "{GMAIL_BASE_URL}/users/me/messages/{msg_id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date",
             );
-            let resp = client
-                .get(&thread_url)
+            let msg_resp = client
+                .get(&msg_url)
                 .bearer_auth(&token)
                 .send()
                 .await
-                .map_err(|e| format!("Gmail threads.get failed: {e}"))?;
+                .map_err(|e| format!("Gmail get message failed: {e}"))?;
 
-            if !resp.status().is_success() {
-                return Err(format!(
-                    "Gmail threads.get {thread_id} failed: {}",
-                    resp.status()
-                ));
+            if !msg_resp.status().is_success() {
+                return Err(format!("Gmail get message {msg_id} failed: {}", msg_resp.status()));
             }
 
-            let metadata_thread: MetadataThread = resp
+            let gmail_msg: GmailMessage = msg_resp
                 .json()
                 .await
-                .map_err(|e| format!("Failed to parse thread metadata: {e}"))?;
-            parse_thread_meta(&metadata_thread, &account_id)
-                .ok_or_else(|| format!("Thread {thread_id} has no messages"))
+                .map_err(|e| format!("Failed to parse message: {e}"))?;
+            Ok(parse_message_meta(&gmail_msg, &account_id))
         });
     }
 
@@ -371,8 +304,8 @@ pub async fn fetch_messages(
     while let Some(result) = join_set.join_next().await {
         match result {
             Ok(Ok(meta)) => messages.push(meta),
-            Ok(Err(e)) => log::warn!("Skipping thread: {e}"),
-            Err(e) => log::warn!("Thread fetch task panicked: {e}"),
+            Ok(Err(e)) => log::warn!("Skipping message: {e}"),
+            Err(e) => log::warn!("Message fetch task panicked: {e}"),
         }
     }
 
@@ -1137,108 +1070,5 @@ mod tests {
         // Should decode back to original
         let decoded = URL_SAFE_NO_PAD.decode(&encoded).unwrap();
         assert_eq!(String::from_utf8(decoded).unwrap(), raw);
-    }
-
-    #[test]
-    fn test_parse_thread_meta_aggregates_unread_starred() {
-        // Thread with 3 messages: M1 (old, unread), M2 (middle, read+starred),
-        // M3 (newest, read). The thread should show as unread AND starred because
-        // we OR-aggregate across all messages.
-        let thread = MetadataThread {
-            messages: Some(vec![
-                GmailMessage {
-                    id: "m1".to_string(),
-                    thread_id: "thread-1".to_string(),
-                    label_ids: Some(vec!["INBOX".to_string(), "UNREAD".to_string()]),
-                    snippet: Some("Old message".to_string()),
-                    internal_date: Some("1700000000000".to_string()),
-                    payload: Some(MessagePart {
-                        mime_type: None,
-                        headers: Some(vec![
-                            Header {
-                                name: "From".to_string(),
-                                value: "alice@example.com".to_string(),
-                            },
-                            Header {
-                                name: "Subject".to_string(),
-                                value: "Thread Subject".to_string(),
-                            },
-                        ]),
-                        body: None,
-                        parts: None,
-                        filename: None,
-                    }),
-                },
-                GmailMessage {
-                    id: "m2".to_string(),
-                    thread_id: "thread-1".to_string(),
-                    label_ids: Some(vec!["INBOX".to_string(), "STARRED".to_string()]),
-                    snippet: Some("Middle message".to_string()),
-                    internal_date: Some("1700000100000".to_string()),
-                    payload: Some(MessagePart {
-                        mime_type: None,
-                        headers: Some(vec![
-                            Header {
-                                name: "From".to_string(),
-                                value: "bob@example.com".to_string(),
-                            },
-                            Header {
-                                name: "Subject".to_string(),
-                                value: "Re: Thread Subject".to_string(),
-                            },
-                        ]),
-                        body: None,
-                        parts: None,
-                        filename: None,
-                    }),
-                },
-                GmailMessage {
-                    id: "m3".to_string(),
-                    thread_id: "thread-1".to_string(),
-                    label_ids: Some(vec!["INBOX".to_string()]),
-                    snippet: Some("Newest message".to_string()),
-                    internal_date: Some("1700000200000".to_string()),
-                    payload: Some(MessagePart {
-                        mime_type: None,
-                        headers: Some(vec![
-                            Header {
-                                name: "From".to_string(),
-                                value: "charlie@example.com".to_string(),
-                            },
-                            Header {
-                                name: "Subject".to_string(),
-                                value: "Re: Thread Subject".to_string(),
-                            },
-                        ]),
-                        body: None,
-                        parts: None,
-                        filename: None,
-                    }),
-                },
-            ]),
-        };
-
-        let meta = parse_thread_meta(&thread, "acc-1").unwrap();
-
-        // Display fields come from the newest message (m3)
-        assert_eq!(meta.id, "m3");
-        assert_eq!(meta.from, "charlie@example.com");
-        assert_eq!(meta.snippet, "Newest message");
-        assert_eq!(meta.date, 1_700_000_200);
-
-        // unread/starred are OR-aggregated across all messages
-        assert!(meta.unread, "thread should be unread (m1 is UNREAD)");
-        assert!(meta.starred, "thread should be starred (m2 is STARRED)");
-    }
-
-    #[test]
-    fn test_parse_thread_meta_empty_returns_none() {
-        let thread = MetadataThread {
-            messages: Some(vec![]),
-        };
-        assert!(parse_thread_meta(&thread, "acc-1").is_none());
-
-        let thread_none = MetadataThread { messages: None };
-        assert!(parse_thread_meta(&thread_none, "acc-1").is_none());
     }
 }
