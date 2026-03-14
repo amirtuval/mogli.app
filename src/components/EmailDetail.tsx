@@ -25,7 +25,7 @@ function sanitizeHtml(html: string): string {
  * collapses email layouts). The shadow root provides a clean rendering
  * context where the email's own styles work correctly.
  */
-function ShadowHtml({ html }: { html: string }) {
+function ShadowHtml({ html, theme }: { html: string; theme: string }) {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,11 +35,14 @@ function ShadowHtml({ html }: { html: string }) {
     // Attach shadow root only once
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
 
-    // HTML emails are designed for white backgrounds — render them that way
-    // regardless of app theme, matching Gmail/Outlook behavior.
-    const bg = '#ffffff'
-    const fg = '#1a1a1a'
-    const linkColor = '#1a73e8'
+    // Theme-aware email background so the content blends with the app
+    const colors =
+      theme === 'light'
+        ? { bg: '#ffffff', fg: '#1a1a1a', link: '#1a73e8' }
+        : theme === 'dark'
+          ? { bg: '#2a2a2e', fg: '#e0e0e0', link: '#6cb6ff' }
+          : { bg: '#0c0c0e', fg: '#d0d0d0', link: '#6cb6ff' } // ultraDark
+    const { bg, fg, link: linkColor } = colors
     shadow.innerHTML = `<style>
 :host { display: block; }
 div { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -48,7 +51,7 @@ div { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-s
 img { max-width: 100%; height: auto; }
 a { color: ${linkColor}; }
 </style><div>${sanitizeHtml(html)}</div>`
-  }, [html])
+  }, [html, theme])
 
   return <div ref={hostRef} className={styles.bodyHtml} />
 }
@@ -225,7 +228,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
 
       <div className={styles.body}>
         {message.body_html ? (
-          <ShadowHtml html={message.body_html} />
+          <ShadowHtml html={message.body_html} theme={theme} />
         ) : message.body_text ? (
           <div className={styles.bodyText}>{message.body_text}</div>
         ) : (
