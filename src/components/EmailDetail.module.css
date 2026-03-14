@@ -143,6 +143,8 @@
 
 .bodyHtml {
   width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 /* ── Actions ── */

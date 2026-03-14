@@ -79,8 +79,13 @@ fn get_header(headers: &[Header], name: &str) -> String {
 }
 
 fn decode_base64url(data: &str) -> Option<String> {
+    // Gmail API returns base64url without padding, but some messages may
+    // contain whitespace, newlines, or standard base64 characters.
+    let cleaned: String = data.chars().filter(|c| !c.is_whitespace()).collect();
     URL_SAFE_NO_PAD
-        .decode(data)
+        .decode(&cleaned)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(&cleaned))
+        .or_else(|_| base64::engine::general_purpose::STANDARD.decode(&cleaned))
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
 }
@@ -96,7 +101,6 @@ fn extract_body(part: &MessagePart) -> (Option<String>, Option<String>) {
                 .as_ref()
                 .and_then(|b| b.data.as_deref())
                 .and_then(decode_base64url);
-            // If body.data is empty but sub-parts exist, recurse
             if html.is_some() {
                 return (html, None);
             }
@@ -780,6 +784,20 @@ mod tests {
     #[test]
     fn test_decode_base64url_invalid() {
         assert!(decode_base64url("!!!invalid!!!").is_none());
+    }
+
+    #[test]
+    fn test_decode_base64url_with_whitespace() {
+        // Gmail API sometimes returns data with embedded newlines
+        let encoded = "SGVs\nbG8g\r\nV29ybGQ";
+        assert_eq!(decode_base64url(encoded), Some("Hello World".to_string()));
+    }
+
+    #[test]
+    fn test_decode_base64url_with_padding() {
+        // "Hi" in standard base64 with padding
+        let encoded = "SGk=";
+        assert_eq!(decode_base64url(encoded), Some("Hi".to_string()));
     }
 
     #[test]

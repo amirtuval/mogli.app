@@ -25,7 +25,7 @@ function sanitizeHtml(html: string): string {
  * collapses email layouts). The shadow root provides a clean rendering
  * context where the email's own styles work correctly.
  */
-function ShadowHtml({ html, isDark }: { html: string; isDark: boolean }) {
+function ShadowHtml({ html }: { html: string }) {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,10 +35,11 @@ function ShadowHtml({ html, isDark }: { html: string; isDark: boolean }) {
     // Attach shadow root only once
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
 
-    const bg = isDark ? '#1e1e2e' : '#ffffff'
-    const fg = isDark ? '#e0e0e0' : '#1a1a1a'
-    const linkColor = isDark ? '#6cb6ff' : '#1a73e8'
-
+    // HTML emails are designed for white backgrounds — render them that way
+    // regardless of app theme, matching Gmail/Outlook behavior.
+    const bg = '#ffffff'
+    const fg = '#1a1a1a'
+    const linkColor = '#1a73e8'
     shadow.innerHTML = `<style>
 :host { display: block; }
 div { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -47,7 +48,7 @@ div { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-s
 img { max-width: 100%; height: auto; }
 a { color: ${linkColor}; }
 </style><div>${sanitizeHtml(html)}</div>`
-  }, [html, isDark])
+  }, [html])
 
   return <div ref={hostRef} className={styles.bodyHtml} />
 }
@@ -224,7 +225,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
 
       <div className={styles.body}>
         {message.body_html ? (
-          <ShadowHtml html={message.body_html} isDark={theme !== 'light'} />
+          <ShadowHtml html={message.body_html} />
         ) : message.body_text ? (
           <div className={styles.bodyText}>{message.body_text}</div>
         ) : (
