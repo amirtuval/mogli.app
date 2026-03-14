@@ -54,6 +54,40 @@ export default function EmailList({
 
   const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
 
+  // Deduplicate messages by thread_id — show one row per thread.
+  // Keep the latest message (by date) and aggregate unread/starred
+  // across all messages in the thread. This matches Gmail's inbox
+  // behavior and prevents multiple rows from highlighting on click.
+  const threadMessages = useMemo(() => {
+    if (!messages) return undefined
+    const threadMap = new Map<string, MessageMeta>()
+    for (const msg of messages) {
+      const existing = threadMap.get(msg.thread_id)
+      if (!existing) {
+        // Clone so we can mutate flags without affecting query cache
+        threadMap.set(msg.thread_id, { ...msg })
+      } else {
+        // Keep the latest message as the display row
+        if (msg.date > existing.date) {
+          const wasUnread = existing.unread
+          const wasStarred = existing.starred
+          threadMap.set(msg.thread_id, {
+            ...msg,
+            unread: msg.unread || wasUnread,
+            starred: msg.starred || wasStarred,
+          })
+        } else {
+          // Older message — just aggregate flags
+          existing.unread = existing.unread || msg.unread
+          existing.starred = existing.starred || msg.starred
+        }
+      }
+    }
+    const result = [...threadMap.values()]
+    result.sort((a, b) => b.date - a.date)
+    return result.length > 0 ? result : undefined
+  }, [messages])
+
   const labelName = useMemo(() => {
     const labels: Record<string, string> = {
       INBOX: 'Inbox',
@@ -69,13 +103,13 @@ export default function EmailList({
   const isFiltered = mailFilter.unread || mailFilter.starred
 
   const filteredMessages = useMemo(() => {
-    if (!messages || !isFiltered) return messages
-    return messages.filter((m) => {
+    if (!threadMessages || !isFiltered) return threadMessages
+    return threadMessages.filter((m) => {
       if (mailFilter.unread && !m.unread) return false
       if (mailFilter.starred && !m.starred) return false
       return true
     })
-  }, [messages, mailFilter, isFiltered])
+  }, [threadMessages, mailFilter, isFiltered])
 
   if (isLoading) {
     return (
@@ -88,7 +122,7 @@ export default function EmailList({
     )
   }
 
-  const totalCount = messages?.length ?? 0
+  const totalCount = threadMessages?.length ?? 0
   const displayMessages = filteredMessages ?? []
   const displayCount = displayMessages.length
 
@@ -131,7 +165,7 @@ export default function EmailList({
 
           return (
             <div
-              key={email.id}
+              key={email.thread_id}
               className={`${styles.row} ${isSelected ? styles.rowSelected : ''}`}
               style={{
                 borderLeft: `2.5px solid ${isSelected ? borderColor : borderColor + '44'}`,

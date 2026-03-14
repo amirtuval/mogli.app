@@ -225,6 +225,111 @@ describe('EmailList', () => {
     expect(screen.getByText('1 of 2 threads · Inbox')).toBeInTheDocument()
   })
 
+  it('should deduplicate messages by thread_id showing one row per thread', () => {
+    const threadedMessages: MessageMeta[] = [
+      {
+        id: 'm1',
+        thread_id: 't1',
+        account_id: 'a1',
+        from: 'Alice',
+        subject: 'Hello',
+        snippet: 'First message',
+        date: Math.floor(Date.now() / 1000) - 600,
+        unread: false,
+        starred: false,
+        labels: ['INBOX'],
+      },
+      {
+        id: 'm2',
+        thread_id: 't1', // same thread
+        account_id: 'a1',
+        from: 'Bob',
+        subject: 'Re: Hello',
+        snippet: 'Reply message',
+        date: Math.floor(Date.now() / 1000) - 300, // newer
+        unread: false,
+        starred: false,
+        labels: ['INBOX'],
+      },
+      {
+        id: 'm3',
+        thread_id: 't2', // different thread
+        account_id: 'a1',
+        from: 'Charlie',
+        subject: 'Other',
+        snippet: 'Other thread',
+        date: Math.floor(Date.now() / 1000) - 100,
+        unread: false,
+        starred: false,
+        labels: ['INBOX'],
+      },
+    ]
+
+    render(
+      <EmailList
+        messages={threadedMessages}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    // Should show 2 threads, not 3 messages
+    expect(screen.getByText('2 threads · Inbox')).toBeInTheDocument()
+    // Latest message in thread t1 (Bob's reply) should be shown
+    expect(screen.getByText('Bob')).toBeInTheDocument()
+    expect(screen.getByText('Charlie')).toBeInTheDocument()
+    // Alice's older message in same thread should NOT appear as separate row
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument()
+  })
+
+  it('should show thread as unread if any message in thread is unread', async () => {
+    const user = userEvent.setup()
+    const threadedMessages: MessageMeta[] = [
+      {
+        id: 'm1',
+        thread_id: 't1',
+        account_id: 'a1',
+        from: 'Alice',
+        subject: 'Hello',
+        snippet: 'First message',
+        date: Math.floor(Date.now() / 1000) - 600,
+        unread: true, // older message is unread
+        starred: false,
+        labels: ['INBOX', 'UNREAD'],
+      },
+      {
+        id: 'm2',
+        thread_id: 't1', // same thread
+        account_id: 'a1',
+        from: 'Bob',
+        subject: 'Re: Hello',
+        snippet: 'Reply',
+        date: Math.floor(Date.now() / 1000) - 300, // newer, but read
+        unread: false,
+        starred: false,
+        labels: ['INBOX'],
+      },
+    ]
+
+    const { container } = render(
+      <EmailList
+        messages={threadedMessages}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    // Thread should show unread dot (aggregated from older unread message)
+    const unreadDots = container.querySelectorAll('[class*="unreadDot"]')
+    expect(unreadDots.length).toBe(1)
+
+    // Thread should appear when Unread filter is active
+    await user.click(screen.getByText('Unread'))
+    expect(screen.getByText('Bob')).toBeInTheDocument()
+  })
+
   it('should show "No matching messages" when filter matches nothing', async () => {
     const user = userEvent.setup()
     const readMessages: MessageMeta[] = [
