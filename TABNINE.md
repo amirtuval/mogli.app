@@ -128,6 +128,15 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR:
 4. `yarn test`
 5. `npx tsc --noEmit`
 
+## Releasing
+
+To create a release:
+1. **Bump the version** in both `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` to the new version (e.g., `0.3.0`). Commit as `chore: bump version to X.Y.Z`.
+2. **Tag and push**: `git tag vX.Y.Z && git push origin vX.Y.Z`
+3. The release workflow verifies the tag matches the version in both config files before building. If they don't match, the build fails immediately.
+
+**Never tag without bumping the version first** — the auto-updater uses the version from `tauri.conf.json` to generate `latest.json`, so a stale version means users won't be prompted to update.
+
 ## Git workflow
 
 - **Never amend commits or force-push.** Always create new commits and push normally. Amending/force-pushing breaks other worktrees and machines that have already pulled the branch.
