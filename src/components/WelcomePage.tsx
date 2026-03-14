@@ -50,16 +50,13 @@ export default function WelcomePage({ onContinue }: WelcomePageProps) {
 
         <button
           onClick={handleConnect}
-          disabled={addAccount.isPending}
           className={`${styles.connectBtn} ${
             connectedAccounts.length === 0 ? styles.connectBtnPrimary : styles.connectBtnSecondary
           }`}
         >
-          {addAccount.isPending
-            ? 'Opening browser...'
-            : connectedAccounts.length === 0
-              ? 'Connect a Google Account'
-              : '+ Add another account'}
+          {connectedAccounts.length === 0
+            ? 'Connect a Google Account'
+            : '+ Add another account'}
         </button>
 
         {connectedAccounts.length > 0 && (

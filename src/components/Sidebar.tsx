@@ -172,9 +172,8 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
         <button
           className={styles.addAccountBtn}
           onClick={() => addAccount.mutate()}
-          disabled={addAccount.isPending}
         >
-          {addAccount.isPending ? 'Adding...' : '+ Add account'}
+          + Add account
         </button>
       </div>
 
