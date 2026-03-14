@@ -9,6 +9,10 @@ use crate::store::AccountStore;
 ///
 /// The frontend calls this once per account so results stream in as each
 /// account completes independently.
+///
+/// When `filter_unread` or `filter_starred` is true the corresponding Gmail
+/// label is added to the `labelIds` query parameter so the API returns only
+/// matching messages — not just the most recent 50.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_account_messages(
@@ -16,6 +20,8 @@ pub async fn get_account_messages(
     account_id: String,
     label: String,
     page_token: Option<String>,
+    filter_unread: Option<bool>,
+    filter_starred: Option<bool>,
 ) -> Result<Vec<MessageMeta>, String> {
     let creds = OAuthCredentials::load()?;
 
@@ -32,8 +38,16 @@ pub async fn get_account_messages(
             .ok_or_else(|| format!("Account {account_id} not found"))?
     };
 
+    let mut labels = vec![label];
+    if filter_unread.unwrap_or(false) {
+        labels.push("UNREAD".to_string());
+    }
+    if filter_starred.unwrap_or(false) {
+        labels.push("STARRED".to_string());
+    }
+
     let mut messages =
-        gmail_api::fetch_messages(&creds, &account_id, &email, &label, page_token.as_deref())
+        gmail_api::fetch_messages(&creds, &account_id, &email, &labels, page_token.as_deref())
             .await?;
 
     messages.sort_by(|a, b| b.date.cmp(&a.date));
@@ -57,8 +71,9 @@ pub async fn get_messages(
         let app = app.clone();
         let label = label.clone();
         let page_token = page_token.clone();
-        join_set
-            .spawn(async move { get_account_messages(app, account_id, label, page_token).await });
+        join_set.spawn(async move {
+            get_account_messages(app, account_id, label, page_token, None, None).await
+        });
     }
 
     let mut all_messages = Vec::new();

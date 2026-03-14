@@ -44,6 +44,7 @@ function AppShell() {
   const activeView = useUIStore((s) => s.activeView)
   const activeAccounts = useUIStore((s) => s.activeAccounts)
   const selectedLabel = useUIStore((s) => s.selectedLabel)
+  const mailFilter = useUIStore((s) => s.mailFilter)
   const calendarWeekStart = useUIStore((s) => s.calendarWeekStart)
   const calendarViewMode = useUIStore((s) => s.calendarViewMode)
   const calendarViewDate = useUIStore((s) => s.calendarViewDate)
@@ -64,6 +65,7 @@ function AppShell() {
   const { data: messages, isLoading: messagesLoading } = useMessages(
     healthyAccountIds,
     selectedLabel,
+    mailFilter,
   )
   const { data: searchResults, isLoading: searchLoading } = useSearchMessages(
     healthyAccountIds,

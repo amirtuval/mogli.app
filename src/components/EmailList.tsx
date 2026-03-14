@@ -112,22 +112,13 @@ export default function EmailList({
 
   const isFiltered = mailFilter.unread || mailFilter.starred
 
-  const filteredMessages = useMemo(() => {
-    if (!threadMessages || !isFiltered) return threadMessages
-    return threadMessages.filter((m) => {
-      if (mailFilter.unread && !m.unread) return false
-      if (mailFilter.starred && !m.starred) return false
-      return true
-    })
-  }, [threadMessages, mailFilter, isFiltered])
-
   const handleCheckboxClick = useCallback(
     (threadId: string, e: React.MouseEvent) => {
       e.stopPropagation()
 
-      if (e.shiftKey && lastSelectedThreadId && filteredMessages) {
+      if (e.shiftKey && lastSelectedThreadId && threadMessages) {
         // Range select: select all threads between last selected and current
-        const ids = filteredMessages.map((m) => m.thread_id)
+        const ids = threadMessages.map((m) => m.thread_id)
         const lastIdx = ids.indexOf(lastSelectedThreadId)
         const currIdx = ids.indexOf(threadId)
         if (lastIdx !== -1 && currIdx !== -1) {
@@ -148,7 +139,7 @@ export default function EmailList({
     },
     [
       lastSelectedThreadId,
-      filteredMessages,
+      threadMessages,
       selectedThreadIds,
       selectAllThreads,
       toggleThreadSelection,
@@ -178,8 +169,7 @@ export default function EmailList({
     )
   }
 
-  const totalCount = threadMessages?.length ?? 0
-  const displayMessages = filteredMessages ?? []
+  const displayMessages = threadMessages ?? []
   const displayCount = displayMessages.length
 
   const allSelected =
@@ -198,9 +188,7 @@ export default function EmailList({
     ? `${selectedThreadIds.size} selected`
     : searchQuery
       ? `${displayCount} results · "${searchQuery}"`
-      : isFiltered
-        ? `${displayCount} of ${totalCount} threads · ${labelName}`
-        : `${totalCount} threads · ${labelName}`
+      : `${displayCount} threads · ${labelName}`
 
   return (
     <div className={styles.container}>

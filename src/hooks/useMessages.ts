@@ -3,23 +3,38 @@ import { useQueries } from '@tanstack/react-query'
 import { invoke } from '@tauri-apps/api/core'
 import type { MessageMeta } from '../types/models'
 
+interface MailFilter {
+  unread: boolean
+  starred: boolean
+}
+
 /**
  * Fetch messages for the given accounts and label.
  *
  * Issues one query **per account** in parallel so each account's messages
  * stream in independently — the first to finish renders immediately.
+ *
+ * When `mailFilter.unread` or `mailFilter.starred` is active, the filter is
+ * passed to the Gmail API as additional `labelIds` so the server returns only
+ * matching messages — not just the most recent 50.
  */
-export function useMessages(activeAccountIds: string[], selectedLabel: string) {
+export function useMessages(
+  activeAccountIds: string[],
+  selectedLabel: string,
+  mailFilter: MailFilter,
+) {
   const enabled = activeAccountIds.length > 0
 
   const queries = useQueries({
     queries: activeAccountIds.map((accountId) => ({
-      queryKey: ['messages', accountId, selectedLabel],
+      queryKey: ['messages', accountId, selectedLabel, mailFilter.unread, mailFilter.starred],
       queryFn: () =>
         invoke<MessageMeta[]>('get_account_messages', {
           accountId,
           label: selectedLabel,
           pageToken: null,
+          filterUnread: mailFilter.unread,
+          filterStarred: mailFilter.starred,
         }),
       enabled,
     })),
