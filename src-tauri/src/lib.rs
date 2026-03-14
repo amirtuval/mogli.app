@@ -152,14 +152,27 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // A second instance tried to launch — focus the existing window instead.
-            if let Some(window) = app.webview_windows().values().next() {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
+        // Single-instance only in release builds — the plugin uses the bundle
+        // identifier ("app.mogly") as the Windows mutex name with no way to
+        // customise it, so dev and prod would share the same lock.
+        .plugin({
+            #[cfg(not(debug_assertions))]
+            {
+                tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                    if let Some(window) = app.webview_windows().values().next() {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
+                })
             }
-        }))
+            #[cfg(debug_assertions)]
+            {
+                // No-op plugin — dev builds allow multiple instances so they
+                // don't conflict with a running production build.
+                tauri::plugin::Builder::<tauri::Wry>::new("single-instance").build()
+            }
+        })
         .manage(AccountStore::new())
         .manage(NotifiedEvents::new())
         .manage(NotifiedMessages::new())

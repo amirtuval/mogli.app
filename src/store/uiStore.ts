@@ -22,6 +22,7 @@ export interface EventModalData {
   allDay?: boolean
   location?: string
   description?: string
+  conferenceUrl?: string
   recurrence?: string
   reminders?: number[]
 }

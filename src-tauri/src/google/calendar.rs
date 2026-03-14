@@ -470,6 +470,21 @@ fn color_id_to_hex(id: &str) -> Option<String> {
     Some(hex.to_string())
 }
 
+/// Returns `true` if `uri` belongs to a known video-conferencing service.
+///
+/// Used as a fallback when `conferenceData.entryPoints` contains the Zoom/Meet
+/// link under an entry-point type other than `"video"` (e.g. `"more"`).
+fn is_conference_url(uri: &str) -> bool {
+    const DOMAINS: &[&str] = &[
+        "zoom.us/",
+        "meet.google.com/",
+        "teams.microsoft.com/",
+        "webex.com/",
+    ];
+    let lower = uri.to_ascii_lowercase();
+    DOMAINS.iter().any(|d| lower.contains(d))
+}
+
 fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Option<CalEvent> {
     let id = event.id?;
     let title = event.summary.unwrap_or_else(|| "(No title)".to_string());
@@ -482,9 +497,20 @@ fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Opt
         .conference_data
         .and_then(|cd| cd.entry_points)
         .and_then(|eps| {
-            eps.into_iter()
+            // Prefer an explicit "video" entry point.
+            let video = eps
+                .iter()
                 .find(|ep| ep.entry_point_type.as_deref() == Some("video"))
-                .and_then(|ep| ep.uri)
+                .and_then(|ep| ep.uri.clone());
+            // Fall back to any entry point whose URI matches a known
+            // video-conferencing domain (handles Zoom integrations that
+            // use entryPointType "more" instead of "video").
+            video.or_else(|| {
+                eps.iter()
+                    .filter_map(|ep| ep.uri.as_deref())
+                    .find(|uri| is_conference_url(uri))
+                    .map(String::from)
+            })
         });
 
     Some(CalEvent {
@@ -880,6 +906,79 @@ mod tests {
         assert_eq!(
             cal_event.conference_url.as_deref(),
             Some("https://zoom.us/j/123456789")
+        );
+    }
+
+    #[test]
+    fn test_is_conference_url() {
+        assert!(is_conference_url("https://zoom.us/j/123456789"));
+        assert!(is_conference_url("https://us02web.zoom.us/j/123"));
+        assert!(is_conference_url("https://meet.google.com/abc-defg-hij"));
+        assert!(is_conference_url(
+            "https://teams.microsoft.com/l/meetup-join/123"
+        ));
+        assert!(is_conference_url("https://company.webex.com/meet/user"));
+        assert!(!is_conference_url("tel:+1234567890"));
+        assert!(!is_conference_url("https://example.com/meeting"));
+    }
+
+    #[test]
+    fn test_event_with_zoom_link_under_more_entry_point() {
+        let json = r#"{
+            "id": "ev-more",
+            "summary": "Zoom via More",
+            "start": { "dateTime": "2026-03-06T14:00:00Z" },
+            "end": { "dateTime": "2026-03-06T15:00:00Z" },
+            "status": "confirmed",
+            "conferenceData": {
+                "entryPoints": [
+                    {
+                        "entryPointType": "more",
+                        "uri": "https://us02web.zoom.us/j/987654321"
+                    },
+                    {
+                        "entryPointType": "phone",
+                        "uri": "tel:+1234567890"
+                    }
+                ]
+            }
+        }"#;
+
+        let event: EventResource = serde_json::from_str(json).unwrap();
+        let cal_event = parse_event(event, "acct1", "primary").unwrap();
+        assert_eq!(
+            cal_event.conference_url.as_deref(),
+            Some("https://us02web.zoom.us/j/987654321")
+        );
+    }
+
+    #[test]
+    fn test_video_entry_point_preferred_over_more() {
+        let json = r#"{
+            "id": "ev-both",
+            "summary": "Both Types",
+            "start": { "dateTime": "2026-03-06T14:00:00Z" },
+            "end": { "dateTime": "2026-03-06T15:00:00Z" },
+            "status": "confirmed",
+            "conferenceData": {
+                "entryPoints": [
+                    {
+                        "entryPointType": "more",
+                        "uri": "https://us02web.zoom.us/j/fallback"
+                    },
+                    {
+                        "entryPointType": "video",
+                        "uri": "https://zoom.us/j/preferred"
+                    }
+                ]
+            }
+        }"#;
+
+        let event: EventResource = serde_json::from_str(json).unwrap();
+        let cal_event = parse_event(event, "acct1", "primary").unwrap();
+        assert_eq!(
+            cal_event.conference_url.as_deref(),
+            Some("https://zoom.us/j/preferred")
         );
     }
 
