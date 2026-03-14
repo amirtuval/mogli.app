@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -20,24 +20,36 @@ function sanitizeHtml(html: string): string {
 }
 
 /**
- * Build a full HTML document for the iframe srcdoc.
- * Wraps the email HTML in a document that:
- * - Matches the app's current theme (background & text color)
- * - Resets margins/padding for seamless embedding
- * - Opens links in the system browser via target="_blank"
+ * Renders email HTML inside a Shadow DOM to isolate it from the app's
+ * global CSS reset (which strips margins/padding from all elements and
+ * collapses email layouts). The shadow root provides a clean rendering
+ * context where the email's own styles work correctly.
  */
-function buildSrcdoc(html: string, isDark: boolean): string {
-  const bg = isDark ? '#1e1e2e' : '#ffffff'
-  const fg = isDark ? '#e0e0e0' : '#1a1a1a'
-  const sanitized = sanitizeHtml(html)
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><base target="_blank"><style>
-html, body { margin: 0; padding: 0; background: ${bg}; color: ${fg};
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 13px; line-height: 1.75; word-wrap: break-word; overflow-wrap: break-word; }
+function ShadowHtml({ html, isDark }: { html: string; isDark: boolean }) {
+  const hostRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+
+    // Attach shadow root only once
+    const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
+
+    const bg = isDark ? '#1e1e2e' : '#ffffff'
+    const fg = isDark ? '#e0e0e0' : '#1a1a1a'
+    const linkColor = isDark ? '#6cb6ff' : '#1a73e8'
+
+    shadow.innerHTML = `<style>
+:host { display: block; }
+div { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px; line-height: 1.75; color: ${fg}; background: ${bg};
+  word-wrap: break-word; overflow-wrap: break-word; }
 img { max-width: 100%; height: auto; }
-a { color: ${isDark ? '#6cb6ff' : '#1a73e8'}; }
-</style></head><body>${sanitized}</body></html>`
+a { color: ${linkColor}; }
+</style><div>${sanitizeHtml(html)}</div>`
+  }, [html, isDark])
+
+  return <div ref={hostRef} className={styles.bodyHtml} />
 }
 
 interface EmailDetailProps {
@@ -82,19 +94,6 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
       }
     }
   }, [autoMarkRead, selectedMessage?.unread, accountId, selectedThreadId, queryClient])
-
-  /** Auto-resize iframe to fit its content so the outer container scrolls instead. */
-  const handleIframeLoad = useCallback((e: React.SyntheticEvent<HTMLIFrameElement>) => {
-    const iframe = e.currentTarget
-    try {
-      const doc = iframe.contentDocument
-      if (doc?.body) {
-        iframe.style.height = `${doc.body.scrollHeight}px`
-      }
-    } catch {
-      // sandbox may block cross-origin access — ignore
-    }
-  }, [])
 
   const handleMarkReadUnread = async () => {
     if (!accountId || !selectedThreadId || !selectedMessage) return
@@ -225,13 +224,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
 
       <div className={styles.body}>
         {message.body_html ? (
-          <iframe
-            className={styles.bodyHtml}
-            sandbox="allow-same-origin"
-            srcDoc={buildSrcdoc(message.body_html, theme !== 'light')}
-            title="Email content"
-            onLoad={handleIframeLoad}
-          />
+          <ShadowHtml html={message.body_html} isDark={theme !== 'light'} />
         ) : message.body_text ? (
           <div className={styles.bodyText}>{message.body_text}</div>
         ) : (
