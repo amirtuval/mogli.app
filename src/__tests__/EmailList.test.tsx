@@ -58,6 +58,8 @@ describe('EmailList', () => {
       activeAccounts: ['a1', 'a2'],
       selectedLabel: 'INBOX',
       mailFilter: { unread: false, starred: false },
+      selectedThreadIds: new Set<string>(),
+      lastSelectedThreadId: null,
     })
   })
 
@@ -358,5 +360,104 @@ describe('EmailList', () => {
 
     await user.click(screen.getByText('Unread'))
     expect(screen.getByText('No matching messages')).toBeInTheDocument()
+  })
+
+  it('should render checkboxes on each email row', () => {
+    const { container } = render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    // Each row should have a checkbox input
+    const checkboxes = container.querySelectorAll('[class*="checkbox"] input[type="checkbox"]')
+    expect(checkboxes.length).toBe(2)
+  })
+
+  it('should render select-all checkbox in header', () => {
+    const { container } = render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    const selectAll = container.querySelector('[class*="selectAllCheckbox"] input[type="checkbox"]')
+    expect(selectAll).toBeInTheDocument()
+  })
+
+  it('should toggle thread selection when checkbox is clicked', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    const checkboxes = container.querySelectorAll('[class*="checkbox"] input[type="checkbox"]')
+    await user.click(checkboxes[0])
+
+    expect(useUIStore.getState().selectedThreadIds.has('t1')).toBe(true)
+    expect(useUIStore.getState().selectedThreadIds.size).toBe(1)
+  })
+
+  it('should show selected count in header when threads are selected', () => {
+    useUIStore.setState({ selectedThreadIds: new Set(['t1']) })
+
+    render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('should select all threads when select-all checkbox is clicked', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    const selectAll = container.querySelector(
+      '[class*="selectAllCheckbox"] input[type="checkbox"]',
+    ) as HTMLInputElement
+    await user.click(selectAll)
+
+    expect(useUIStore.getState().selectedThreadIds.size).toBe(2)
+    expect(useUIStore.getState().selectedThreadIds.has('t1')).toBe(true)
+    expect(useUIStore.getState().selectedThreadIds.has('t2')).toBe(true)
+  })
+
+  it('should hide filter chips when selection is active', () => {
+    useUIStore.setState({ selectedThreadIds: new Set(['t1']) })
+
+    render(
+      <EmailList
+        messages={MOCK_MESSAGES}
+        accounts={MOCK_ACCOUNTS}
+        isLoading={false}
+        selectedLabel="INBOX"
+      />,
+    )
+
+    expect(screen.queryByText('Unread')).not.toBeInTheDocument()
+    expect(screen.queryByText('Starred')).not.toBeInTheDocument()
   })
 })

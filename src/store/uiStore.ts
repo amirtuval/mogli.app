@@ -83,6 +83,8 @@ interface UIState {
   showEventModal: boolean
   eventModalDefaults: EventModalData | null
   activeReminders: ActiveReminder[]
+  selectedThreadIds: Set<string>
+  lastSelectedThreadId: string | null
 
   setTheme: (theme: Theme) => void
   setActiveView: (view: AppView) => void
@@ -109,6 +111,9 @@ interface UIState {
   addReminder: (payload: ReminderPayload) => void
   dismissReminder: (eventId: string) => void
   snoozeReminder: (eventId: string, minutes: number) => void
+  toggleThreadSelection: (threadId: string) => void
+  selectAllThreads: (threadIds: string[]) => void
+  clearSelection: () => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -130,6 +135,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   showEventModal: false,
   eventModalDefaults: null,
   activeReminders: [],
+  selectedThreadIds: new Set<string>(),
+  lastSelectedThreadId: null,
 
   setTheme: (theme) => {
     set({ theme })
@@ -246,6 +253,19 @@ export const useUIStore = create<UIState>((set, get) => ({
       console.warn('Failed to snooze reminder:', e),
     )
   },
+  toggleThreadSelection: (threadId) =>
+    set((state) => {
+      const next = new Set(state.selectedThreadIds)
+      if (next.has(threadId)) {
+        next.delete(threadId)
+      } else {
+        next.add(threadId)
+      }
+      return { selectedThreadIds: next, lastSelectedThreadId: threadId }
+    }),
+  selectAllThreads: (threadIds) =>
+    set({ selectedThreadIds: new Set(threadIds), lastSelectedThreadId: null }),
+  clearSelection: () => set({ selectedThreadIds: new Set<string>(), lastSelectedThreadId: null }),
 }))
 
 /** Load the persisted theme from the backend store and apply it. */

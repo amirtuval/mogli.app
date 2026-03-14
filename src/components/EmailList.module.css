@@ -11,6 +11,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
+}
+
+/* ── Select-all checkbox ── */
+.selectAllCheckbox {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.selectAllCheckbox input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  accent-color: #4f9cf9;
 }
 
 .headerInfo {
@@ -68,6 +84,40 @@
 
 .rowSelected {
   background: var(--bg-selected);
+}
+
+.rowChecked {
+  background: rgba(79, 156, 249, 0.08);
+}
+
+/* ── Per-row checkbox ── */
+.checkbox {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    width 0.15s,
+    opacity 0.15s,
+    margin 0.15s;
+  margin-left: 0;
+  cursor: pointer;
+}
+
+.row:hover .checkbox,
+.checkbox.checkboxVisible {
+  width: 22px;
+  opacity: 1;
+  margin-left: 8px;
+}
+
+.checkbox input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  accent-color: #4f9cf9;
 }
 
 .rowContent {

@@ -2,7 +2,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::google::gmail as gmail_api;
 use crate::google::oauth::OAuthCredentials;
-use crate::models::{MessageMeta, SendMessageRequest, Thread};
+use crate::models::{BatchModifyItem, MessageMeta, SendMessageRequest, Thread};
 use crate::store::AccountStore;
 
 /// Fetch messages for a single account and label.
@@ -217,4 +217,61 @@ pub async fn send_message(app: AppHandle, request: SendMessageRequest) -> Result
         request.references.as_deref(),
     )
     .await
+}
+
+/// Batch modify labels on multiple threads across accounts.
+///
+/// Used by the frontend multi-select feature to perform bulk mark-read,
+/// mark-unread, and archive operations.
+#[tauri::command]
+#[specta::specta]
+pub async fn batch_modify_threads(
+    app: AppHandle,
+    items: Vec<BatchModifyItem>,
+    add_labels: Vec<String>,
+    remove_labels: Vec<String>,
+) -> Result<(), String> {
+    let creds = OAuthCredentials::load()?;
+    let mut join_set = tokio::task::JoinSet::new();
+
+    let add_labels = std::sync::Arc::new(add_labels);
+    let remove_labels = std::sync::Arc::new(remove_labels);
+
+    for item in items {
+        let email = get_account_email(&app, &item.account_id)?;
+        let creds = creds.clone();
+        let add = std::sync::Arc::clone(&add_labels);
+        let remove = std::sync::Arc::clone(&remove_labels);
+        join_set.spawn(async move {
+            let add_refs: Vec<&str> = add.iter().map(String::as_str).collect();
+            let remove_refs: Vec<&str> = remove.iter().map(String::as_str).collect();
+            gmail_api::modify_thread_labels(
+                &creds,
+                &email,
+                &item.thread_id,
+                &add_refs,
+                &remove_refs,
+            )
+            .await
+        });
+    }
+
+    let mut errors = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => errors.push(e),
+            Err(e) => errors.push(format!("Task panicked: {e}")),
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Batch modify partially failed ({} errors): {}",
+            errors.len(),
+            errors.join("; ")
+        ))
+    }
 }

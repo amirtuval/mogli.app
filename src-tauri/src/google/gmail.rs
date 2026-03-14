@@ -490,7 +490,7 @@ pub async fn fetch_thread(
 }
 
 /// Modify labels on all messages in a thread.
-async fn modify_thread_labels(
+pub async fn modify_thread_labels(
     creds: &OAuthCredentials,
     email: &str,
     thread_id: &str,
