@@ -21,3 +21,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('@tauri-apps/api/app', () => ({
   getVersion: vi.fn(() => Promise.resolve('0.2.1')),
 }))
+
+// Mock @tauri-apps/plugin-shell
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  open: vi.fn(() => Promise.resolve()),
+}))

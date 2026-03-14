@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import type { Account, MessageMeta } from '../types/models'
@@ -49,8 +50,22 @@ div { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-s
   font-size: 13px; line-height: 1.75; color: ${fg}; background: ${bg};
   word-wrap: break-word; overflow-wrap: break-word; }
 img { max-width: 100%; height: auto; }
-a { color: ${linkColor}; }
+a { color: ${linkColor}; cursor: pointer; }
 </style><div>${sanitizeHtml(html)}</div>`
+
+    // Intercept link clicks inside the shadow DOM and open them in the
+    // system browser instead of navigating the Tauri webview.
+    const handleClick = (e: Event) => {
+      const anchor = (e.target as HTMLElement).closest?.('a')
+      if (!anchor) return
+      const href = anchor.getAttribute('href')
+      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+        e.preventDefault()
+        void shellOpen(href)
+      }
+    }
+    shadow.addEventListener('click', handleClick)
+    return () => shadow.removeEventListener('click', handleClick)
   }, [html, theme])
 
   return <div ref={hostRef} className={styles.bodyHtml} />
