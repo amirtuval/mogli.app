@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use log::{error, warn};
@@ -8,6 +10,22 @@ use crate::google::gmail as gmail_api;
 use crate::google::oauth::OAuthCredentials;
 use crate::keychain;
 use crate::store::{self, AccountStore};
+
+/// Tracks which message IDs have already had an OS notification fired.
+/// Prevents duplicate notifications when `history.list` returns the same
+/// messages across sync cycles (e.g. if `update_history_id` failed).
+/// Reset on app restart.
+pub struct NotifiedMessages {
+    pub ids: Mutex<HashSet<String>>,
+}
+
+impl NotifiedMessages {
+    pub fn new() -> Self {
+        Self {
+            ids: Mutex::new(HashSet::new()),
+        }
+    }
+}
 
 /// Check if an error string indicates an authentication/authorization failure
 /// that should mark the account as needing re-authentication.
@@ -133,12 +151,36 @@ async fn sync_account(
                     warn!("Failed to update historyId for {email}: {e}");
                 }
 
-                let has_new = !result.new_message_ids.is_empty();
+                // Dedup message IDs — Gmail can return the same message in
+                // multiple history records when it has multiple label changes.
+                let unique_ids: Vec<String> = {
+                    let mut seen = HashSet::new();
+                    result
+                        .new_message_ids
+                        .into_iter()
+                        .filter(|id| seen.insert(id.clone()))
+                        .collect()
+                };
 
-                // Notify only for the newly arrived messages
+                // Filter out messages we've already notified about (guards
+                // against re-notification when historyId update fails).
+                let novel_ids: Vec<String> = {
+                    let notified = app.state::<NotifiedMessages>();
+                    let ids = notified
+                        .ids
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    unique_ids
+                        .into_iter()
+                        .filter(|id| !ids.contains(id))
+                        .collect()
+                };
+
+                let has_new = !novel_ids.is_empty();
+
+                // Notify only for genuinely new messages
                 if has_new {
-                    notify_new_messages(creds, app, account_id, email, &result.new_message_ids)
-                        .await;
+                    notify_new_messages(creds, app, account_id, email, &novel_ids).await;
                 }
 
                 return Ok(has_new);
@@ -174,6 +216,9 @@ struct OpenThread {
 }
 
 /// Fetch metadata for newly arrived messages and fire OS notifications.
+/// Only notifies for messages that are still unread (skips messages the
+/// user already read on another client). Records notified IDs to prevent
+/// duplicates across sync cycles.
 async fn notify_new_messages(
     creds: &OAuthCredentials,
     app: &AppHandle,
@@ -197,7 +242,26 @@ async fn notify_new_messages(
             }
         };
 
+    // Record all fetched IDs as notified (even read ones) so we don't
+    // re-fetch them on the next cycle.
+    {
+        let notified = app.state::<NotifiedMessages>();
+        let mut ids = notified
+            .ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for id in &ids_to_fetch {
+            ids.insert(id.clone());
+        }
+    }
+
     for msg in &messages {
+        // Skip messages that are already read — the user read them on
+        // another client before this sync cycle fired.
+        if !msg.unread {
+            continue;
+        }
+
         // Fire OS notification via notify-rust (bypasses Tauri plugin's broken
         // async spawn on Windows — see crate::notify module docs).
         if let Err(e) = crate::notify::send(&msg.from, &msg.subject) {
@@ -257,5 +321,68 @@ mod tests {
             "Gmail history.list failed: 500 Internal Server Error"
         ));
         assert!(!is_auth_error(""));
+    }
+
+    #[test]
+    fn test_notified_messages_dedup() {
+        let notified = NotifiedMessages::new();
+        let mut ids = notified.ids.lock().unwrap();
+
+        // First insert succeeds
+        assert!(ids.insert("msg-1".to_string()));
+        // Duplicate insert returns false
+        assert!(!ids.insert("msg-1".to_string()));
+        // Different ID succeeds
+        assert!(ids.insert("msg-2".to_string()));
+
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn test_dedup_message_ids_from_history() {
+        // Simulate Gmail returning the same message ID in multiple history records
+        let raw_ids = vec![
+            "msg-a".to_string(),
+            "msg-b".to_string(),
+            "msg-a".to_string(), // duplicate
+            "msg-c".to_string(),
+            "msg-b".to_string(), // duplicate
+        ];
+
+        let unique_ids: Vec<String> = {
+            let mut seen = HashSet::new();
+            raw_ids
+                .into_iter()
+                .filter(|id| seen.insert(id.clone()))
+                .collect()
+        };
+
+        assert_eq!(unique_ids, vec!["msg-a", "msg-b", "msg-c"]);
+    }
+
+    #[test]
+    fn test_cross_cycle_dedup() {
+        let notified = NotifiedMessages::new();
+
+        // Simulate first cycle: notify about msg-1 and msg-2
+        {
+            let mut ids = notified.ids.lock().unwrap();
+            ids.insert("msg-1".to_string());
+            ids.insert("msg-2".to_string());
+        }
+
+        // Simulate second cycle: history returns msg-1 again (historyId update failed)
+        // plus a genuinely new msg-3
+        let incoming = vec!["msg-1".to_string(), "msg-3".to_string()];
+        let novel: Vec<String> = {
+            let ids = notified.ids.lock().unwrap();
+            incoming
+                .into_iter()
+                .filter(|id| !ids.contains(id))
+                .collect()
+        };
+
+        // Only msg-3 should be novel
+        assert_eq!(novel, vec!["msg-3"]);
     }
 }

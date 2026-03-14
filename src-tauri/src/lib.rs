@@ -25,6 +25,7 @@ mod sync;
 
 use reminders::{ActiveReminders, NotifiedEvents};
 use store::AccountStore;
+use sync::NotifiedMessages;
 use tauri::Manager;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
@@ -161,6 +162,7 @@ pub fn run() {
         }))
         .manage(AccountStore::new())
         .manage(NotifiedEvents::new())
+        .manage(NotifiedMessages::new())
         .manage(ActiveReminders::new())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
