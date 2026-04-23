@@ -27,14 +27,26 @@ impl NotifiedMessages {
     }
 }
 
-/// Check if an error string indicates an authentication/authorization failure
-/// that should mark the account as needing re-authentication.
-pub fn is_auth_error(error: &str) -> bool {
+/// Check if an error indicates Google rejected the token — the user must
+/// re-authenticate.
+pub fn is_auth_revoked(error: &str) -> bool {
     error.starts_with("AUTH_EXPIRED:")
         || error.contains("invalid_grant")
         || error.contains("UNAUTHENTICATED")
         || error.contains("Invalid Credentials")
-        || error.contains("Keychain retrieve error")
+}
+
+/// Check if an error indicates the OS keyring was inaccessible (transient on
+/// Linux with Secret Service / D-Bus backends).
+pub fn is_keychain_error(error: &str) -> bool {
+    error.contains("Keychain retrieve error")
+}
+
+/// Convenience: returns `true` for any auth-related error (revoked **or**
+/// keychain). Used by callers that propagate errors upward and let the
+/// top-level handler distinguish between the two cases.
+pub fn is_auth_error(error: &str) -> bool {
+    is_auth_revoked(error) || is_keychain_error(error)
 }
 
 /// Fast notification pipe — polls `history.list` every 15 seconds.
@@ -110,14 +122,20 @@ async fn check_all_accounts(app: &AppHandle) {
                     found_new = true;
                 }
             }
-            Err(e) if is_auth_error(&e) => {
+            Err(e) if is_auth_revoked(&e) => {
                 warn!(
-                    "Background sync: auth failed for {}, marking account: {e}",
+                    "Background sync: auth revoked for {}, marking account: {e}",
                     account.email
                 );
                 let _ = store::set_auth_expired(app, &account.id, true);
                 let _ = keychain::delete_tokens(&account.email);
                 let _ = app.emit("account:auth_expired", &account.id);
+            }
+            Err(e) if is_keychain_error(&e) => {
+                warn!(
+                    "Background sync: keychain unavailable for {}, will retry: {e}",
+                    account.email
+                );
             }
             Err(e) => {
                 error!("Background sync: failed for {}: {e}", account.email);
@@ -384,5 +402,53 @@ mod tests {
 
         // Only msg-3 should be novel
         assert_eq!(novel, vec!["msg-3"]);
+    }
+
+    #[test]
+    fn test_is_auth_revoked_sentinel() {
+        assert!(is_auth_revoked("AUTH_EXPIRED:user@example.com"));
+    }
+
+    #[test]
+    fn test_is_auth_revoked_invalid_grant() {
+        assert!(is_auth_revoked("Token refresh failed: invalid_grant"));
+    }
+
+    #[test]
+    fn test_is_auth_revoked_unauthenticated() {
+        assert!(is_auth_revoked(
+            r#"Gmail history.list failed: {"error":{"status":"UNAUTHENTICATED"}}"#
+        ));
+    }
+
+    #[test]
+    fn test_is_auth_revoked_invalid_credentials() {
+        assert!(is_auth_revoked(
+            r#"Gmail history.list failed: {"error":{"errors":[{"message":"Invalid Credentials"}]}}"#
+        ));
+    }
+
+    #[test]
+    fn test_is_auth_revoked_not_keychain() {
+        assert!(!is_auth_revoked("Keychain retrieve error: item not found"));
+    }
+
+    #[test]
+    fn test_is_keychain_error() {
+        assert!(is_keychain_error("Keychain retrieve error: item not found"));
+        assert!(is_keychain_error("Keychain retrieve error: dbus timeout"));
+    }
+
+    #[test]
+    fn test_is_keychain_error_not_auth() {
+        assert!(!is_keychain_error("AUTH_EXPIRED:user@example.com"));
+        assert!(!is_keychain_error("Token refresh failed: invalid_grant"));
+    }
+
+    #[test]
+    fn test_is_auth_error_includes_both() {
+        assert!(is_auth_error("AUTH_EXPIRED:user@example.com"));
+        assert!(is_auth_error("Keychain retrieve error: locked"));
+        assert!(!is_auth_error("Network timeout"));
     }
 }
