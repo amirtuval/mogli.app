@@ -34,16 +34,36 @@ pub fn store_tokens(email: &str, tokens: &StoredTokens) -> Result<(), String> {
     Ok(())
 }
 
+const KEYCHAIN_RETRIES: u32 = 3;
+const KEYCHAIN_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
+
 /// Retrieve tokens from the OS keychain.
+///
+/// Retries up to [`KEYCHAIN_RETRIES`] times with a short delay between
+/// attempts to work around transient Secret Service / D-Bus failures on
+/// Linux.
 pub fn get_tokens(email: &str) -> Result<StoredTokens, String> {
     let entry = keyring::Entry::new(SERVICE_NAME, email)
         .map_err(|e| format!("Keychain entry error: {e}"))?;
-    let json = entry
-        .get_password()
-        .map_err(|e| format!("Keychain retrieve error: {e}"))?;
-    let tokens: StoredTokens =
-        serde_json::from_str(&json).map_err(|e| format!("Deserialize error: {e}"))?;
-    Ok(tokens)
+
+    let mut last_err = String::new();
+    for attempt in 0..KEYCHAIN_RETRIES {
+        match entry.get_password() {
+            Ok(json) => {
+                let tokens: StoredTokens =
+                    serde_json::from_str(&json).map_err(|e| format!("Deserialize error: {e}"))?;
+                return Ok(tokens);
+            }
+            Err(e) => {
+                last_err = format!("Keychain retrieve error: {e}");
+                if attempt + 1 < KEYCHAIN_RETRIES {
+                    std::thread::sleep(KEYCHAIN_RETRY_DELAY);
+                }
+            }
+        }
+    }
+
+    Err(last_err)
 }
 
 /// Delete tokens from the OS keychain.

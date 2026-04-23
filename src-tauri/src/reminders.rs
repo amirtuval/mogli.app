@@ -11,7 +11,7 @@ use crate::google::oauth::OAuthCredentials;
 use crate::keychain;
 use crate::models::ReminderPayload;
 use crate::store::{self, AccountStore};
-use crate::sync::is_auth_error;
+use crate::sync::{is_auth_error, is_auth_revoked, is_keychain_error};
 
 const REMINDER_CHECK_SECS: u64 = 60;
 const REMINDER_WINDOW_SECS: i64 = 600; // 10 minutes
@@ -110,15 +110,21 @@ async fn check_upcoming_events(app: &AppHandle) {
         }
         if let Err(e) =
             check_account_events(app, &creds, account, &enabled_state, now, time_max).await
-            && is_auth_error(&e)
         {
-            warn!(
-                "Calendar reminders: auth failed for {}, marking account: {e}",
-                account.email
-            );
-            let _ = store::set_auth_expired(app, &account.id, true);
-            let _ = keychain::delete_tokens(&account.email);
-            let _ = app.emit("account:auth_expired", &account.id);
+            if is_auth_revoked(&e) {
+                warn!(
+                    "Calendar reminders: auth revoked for {}, marking account: {e}",
+                    account.email
+                );
+                let _ = store::set_auth_expired(app, &account.id, true);
+                let _ = keychain::delete_tokens(&account.email);
+                let _ = app.emit("account:auth_expired", &account.id);
+            } else if is_keychain_error(&e) {
+                warn!(
+                    "Calendar reminders: keychain unavailable for {}, will retry: {e}",
+                    account.email
+                );
+            }
         }
     }
 }
