@@ -109,13 +109,16 @@ export default function MonthView({
       const endTimeStr = `${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`
 
       const isAllDay = ev.all_day || ev.end - ev.start >= 86400
-      // For multi-day all-day events, compute inclusive end date (day before
-      // Google's exclusive end timestamp).
-      let endDateStr: string | undefined
+      // Compute the end date string. For all-day events Google uses an
+      // exclusive end, so subtract one day to get the inclusive end date.
+      // For timed events use the end timestamp date directly.
+      let endDateStr: string
       if (isAllDay) {
         const lastDay = new Date(ev.end * 1000)
         lastDay.setDate(lastDay.getDate() - 1)
         endDateStr = `${lastDay.getFullYear()}-${pad2(lastDay.getMonth() + 1)}-${pad2(lastDay.getDate())}`
+      } else {
+        endDateStr = `${endDate.getFullYear()}-${pad2(endDate.getMonth() + 1)}-${pad2(endDate.getDate())}`
       }
 
       openEventModal({

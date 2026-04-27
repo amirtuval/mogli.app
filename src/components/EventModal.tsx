@@ -294,9 +294,9 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
     }
 
     const startD = new Date(`${date}T${startTime}:00`)
-    const endD = new Date(`${date}T${endTime}:00`)
+    const endD = new Date(`${endDate}T${endTime}:00`)
     if (endD <= startD) {
-      setError('End time must be after start time')
+      setError('End must be after start')
       return null
     }
     return {
@@ -464,46 +464,34 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             <label htmlFor="allDay">All day</label>
           </div>
 
-          {/* Date fields — two fields when all-day, single field otherwise */}
-          {allDay ? (
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <span className={styles.label}>Start date</span>
-                <input
-                  type="date"
-                  className={styles.input}
-                  value={date}
-                  onChange={(e) => {
-                    const newDate = e.target.value
-                    setDate(newDate)
-                    if (endDate < newDate) {
-                      setEndDate(newDate)
-                    }
-                  }}
-                />
-              </div>
-              <div className={styles.field}>
-                <span className={styles.label}>End date</span>
-                <input
-                  type="date"
-                  className={styles.input}
-                  value={endDate}
-                  min={date}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-            </div>
-          ) : (
+          {/* Date fields — always show start + end date */}
+          <div className={styles.row}>
             <div className={styles.field}>
-              <span className={styles.label}>Date</span>
+              <span className={styles.label}>Start date</span>
               <input
                 type="date"
                 className={styles.input}
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  const newDate = e.target.value
+                  setDate(newDate)
+                  if (endDate < newDate) {
+                    setEndDate(newDate)
+                  }
+                }}
               />
             </div>
-          )}
+            <div className={styles.field}>
+              <span className={styles.label}>End date</span>
+              <input
+                type="date"
+                className={styles.input}
+                value={endDate}
+                min={date}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          </div>
 
           {/* Time pickers — hidden when all-day */}
           {!allDay && (
