@@ -20,6 +20,8 @@ export interface EventModalData {
   calendarId?: string
   title?: string
   allDay?: boolean
+  /** End date for multi-day all-day events (YYYY-MM-DD, inclusive). */
+  endDate?: string
   location?: string
   description?: string
   conferenceUrl?: string

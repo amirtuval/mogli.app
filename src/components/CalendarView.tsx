@@ -304,6 +304,16 @@ export default function CalendarView({
       const startTimeStr = `${pad2(startDate.getHours())}:${pad2(startDate.getMinutes())}`
       const endTimeStr = `${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`
 
+      const isAllDay = ev.all_day || ev.end - ev.start >= 86400
+      // For multi-day all-day events, compute inclusive end date (day before
+      // Google's exclusive end timestamp).
+      let endDateStr: string | undefined
+      if (isAllDay) {
+        const lastDay = new Date(ev.end * 1000)
+        lastDay.setDate(lastDay.getDate() - 1)
+        endDateStr = `${lastDay.getFullYear()}-${pad2(lastDay.getMonth() + 1)}-${pad2(lastDay.getDate())}`
+      }
+
       openEventModal({
         mode: 'edit',
         date: dateStr,
@@ -313,7 +323,8 @@ export default function CalendarView({
         accountId: ev.account_id,
         calendarId: ev.calendar_id,
         title: ev.title,
-        allDay: ev.all_day || ev.end - ev.start >= 86400,
+        allDay: isAllDay,
+        endDate: endDateStr,
         location: ev.location ?? undefined,
         description: ev.description ?? undefined,
         conferenceUrl: ev.conference_url ?? undefined,
@@ -742,6 +753,10 @@ export default function CalendarView({
                     const color = eventColor(ev, accounts)
                     const cal = calendars.find((c) => c.id === ev.calendar_id)
                     const acct = accounts.find((a) => a.id === ev.account_id)
+                    const totalDays = Math.ceil((ev.end - ev.start) / 86400)
+                    const dayStartTs =
+                      new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000
+                    const dayOfEvent = Math.floor((dayStartTs - ev.start) / 86400) + 1
                     return (
                       <div
                         key={ev.id}
@@ -754,6 +769,7 @@ export default function CalendarView({
                         onClick={() => openEditModal(ev)}
                       >
                         {ev.title}
+                        {totalDays > 1 && ` · Day ${dayOfEvent}/${totalDays}`}
 
                         {/* Hover popover */}
                         <div className={styles.eventPopover}>
