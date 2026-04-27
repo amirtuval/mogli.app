@@ -151,6 +151,20 @@ pub async fn create_event(
 ) -> Result<CalEvent, String> {
     let creds = OAuthCredentials::load()?;
     let email = store::account_email(&app, &account_id)?;
+
+    let attendee_models: Option<Vec<crate::models::Attendee>> = rest.attendees.map(|list| {
+        list.into_iter()
+            .map(|a| crate::models::Attendee {
+                email: a.email,
+                display_name: a.name,
+                response_status: None,
+                is_optional: false,
+                is_organizer: false,
+                is_self: false,
+            })
+            .collect()
+    });
+
     calendar_api::create_event(
         &creds,
         &account_id,
@@ -165,6 +179,8 @@ pub async fn create_event(
         rest.description.as_deref(),
         rest.recurrence.as_deref(),
         rest.reminder_minutes.as_deref(),
+        attendee_models.as_deref(),
+        rest.add_conference.unwrap_or(false),
     )
     .await
 }
@@ -189,6 +205,20 @@ pub async fn update_event(
 ) -> Result<CalEvent, String> {
     let creds = OAuthCredentials::load()?;
     let email = store::account_email(&app, &account_id)?;
+
+    let attendee_models: Option<Vec<crate::models::Attendee>> = rest.attendees.map(|list| {
+        list.into_iter()
+            .map(|a| crate::models::Attendee {
+                email: a.email,
+                display_name: a.name,
+                response_status: None,
+                is_optional: false,
+                is_organizer: false,
+                is_self: false,
+            })
+            .collect()
+    });
+
     calendar_api::update_event(
         &creds,
         &account_id,
@@ -204,6 +234,8 @@ pub async fn update_event(
         rest.description.as_deref(),
         rest.recurrence.as_deref(),
         rest.reminder_minutes.as_deref(),
+        attendee_models.as_deref(),
+        rest.add_conference.unwrap_or(false),
     )
     .await
 }
@@ -222,6 +254,13 @@ pub async fn delete_event(
     calendar_api::delete_event(&creds, &email, &calendar_id, &event_id).await
 }
 
+/// Attendee input from the frontend.
+#[derive(Debug, serde::Deserialize, specta::Type)]
+pub struct AttendeeInput {
+    pub email: String,
+    pub name: Option<String>,
+}
+
 /// Optional fields for `create_event`, bundled to stay within specta's 10-param limit.
 #[derive(Debug, serde::Deserialize, specta::Type)]
 pub struct CreateEventOptionals {
@@ -229,6 +268,8 @@ pub struct CreateEventOptionals {
     pub description: Option<String>,
     pub recurrence: Option<Vec<String>>,
     pub reminder_minutes: Option<Vec<i32>>,
+    pub attendees: Option<Vec<AttendeeInput>>,
+    pub add_conference: Option<bool>,
 }
 
 /// Optional fields for `update_event`, bundled to stay within specta's 10-param limit.
@@ -238,6 +279,8 @@ pub struct UpdateEventOptionals {
     pub description: Option<String>,
     pub recurrence: Option<Vec<String>>,
     pub reminder_minutes: Option<Vec<i32>>,
+    pub attendees: Option<Vec<AttendeeInput>>,
+    pub add_conference: Option<bool>,
 }
 
 /// Return all currently-active reminder payloads.

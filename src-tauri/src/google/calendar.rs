@@ -41,6 +41,7 @@ struct EventResource {
     color_id: Option<String>,
     status: Option<String>,
     conference_data: Option<ConferenceData>,
+    attendees: Option<Vec<AttendeeResource>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +64,18 @@ struct ConferenceData {
 struct EntryPoint {
     entry_point_type: Option<String>,
     uri: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AttendeeResource {
+    email: Option<String>,
+    display_name: Option<String>,
+    response_status: Option<String>,
+    optional: Option<bool>,
+    organizer: Option<bool>,
+    #[serde(rename = "self")]
+    is_self: Option<bool>,
 }
 
 // --- Public API ---
@@ -184,6 +197,8 @@ pub async fn create_event(
     description: Option<&str>,
     recurrence: Option<&[String]>,
     reminder_minutes: Option<&[i32]>,
+    attendees: Option<&[crate::models::Attendee]>,
+    add_conference: bool,
 ) -> Result<CalEvent, String> {
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
@@ -198,6 +213,8 @@ pub async fn create_event(
         description,
         recurrence,
         reminder_minutes,
+        attendees,
+        add_conference,
     );
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events");
@@ -205,6 +222,7 @@ pub async fn create_event(
     let resp = client
         .post(&url)
         .bearer_auth(&token)
+        .query(&[("conferenceDataVersion", "1"), ("sendUpdates", "all")])
         .json(&body)
         .send()
         .await
@@ -241,6 +259,8 @@ pub async fn update_event(
     description: Option<&str>,
     recurrence: Option<&[String]>,
     reminder_minutes: Option<&[i32]>,
+    attendees: Option<&[crate::models::Attendee]>,
+    add_conference: bool,
 ) -> Result<CalEvent, String> {
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
@@ -255,6 +275,8 @@ pub async fn update_event(
         description,
         recurrence,
         reminder_minutes,
+        attendees,
+        add_conference,
     );
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let encoded_event_id = urlencoding::encode(event_id);
@@ -263,6 +285,7 @@ pub async fn update_event(
     let resp = client
         .patch(&url)
         .bearer_auth(&token)
+        .query(&[("conferenceDataVersion", "1"), ("sendUpdates", "all")])
         .json(&body)
         .send()
         .await
@@ -331,6 +354,10 @@ struct EventBody {
     recurrence: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reminders: Option<EventRemindersBody>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attendees: Option<Vec<AttendeeBody>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    conference_data: Option<ConferenceDataBody>,
 }
 
 #[derive(Debug, Serialize)]
@@ -358,6 +385,36 @@ struct EventDateTimeBody {
     time_zone: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AttendeeBody {
+    email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    optional: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConferenceDataBody {
+    create_request: ConferenceCreateRequest,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConferenceCreateRequest {
+    request_id: String,
+    conference_solution_key: ConferenceSolutionKey,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConferenceSolutionKey {
+    #[serde(rename = "type")]
+    key_type: String,
+}
+
 // --- Helpers ---
 
 #[allow(clippy::too_many_arguments)]
@@ -371,6 +428,8 @@ fn build_event_body(
     description: Option<&str>,
     recurrence: Option<&[String]>,
     reminder_minutes: Option<&[i32]>,
+    attendees: Option<&[crate::models::Attendee]>,
+    add_conference: bool,
 ) -> EventBody {
     let (start_body, end_body) = if all_day {
         let start_date = timestamp_to_date_string(start);
@@ -423,6 +482,29 @@ fn build_event_body(
         }
     });
 
+    let attendee_bodies = attendees.map(|list| {
+        list.iter()
+            .map(|a| AttendeeBody {
+                email: a.email.clone(),
+                display_name: a.display_name.clone(),
+                optional: if a.is_optional { Some(true) } else { None },
+            })
+            .collect()
+    });
+
+    let conference_data = if add_conference {
+        Some(ConferenceDataBody {
+            create_request: ConferenceCreateRequest {
+                request_id: uuid::Uuid::new_v4().to_string(),
+                conference_solution_key: ConferenceSolutionKey {
+                    key_type: "hangoutsMeet".to_string(),
+                },
+            },
+        })
+    } else {
+        None
+    };
+
     EventBody {
         summary: title.to_string(),
         start: start_body,
@@ -431,6 +513,8 @@ fn build_event_body(
         description: description.map(String::from),
         recurrence: recurrence.map(<[String]>::to_vec),
         reminders,
+        attendees: attendee_bodies,
+        conference_data,
     }
 }
 
@@ -513,6 +597,22 @@ fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Opt
             })
         });
 
+    let attendees = event
+        .attendees
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|a| {
+            Some(crate::models::Attendee {
+                email: a.email?,
+                display_name: a.display_name,
+                response_status: a.response_status,
+                is_optional: a.optional.unwrap_or(false),
+                is_organizer: a.organizer.unwrap_or(false),
+                is_self: a.is_self.unwrap_or(false),
+            })
+        })
+        .collect();
+
     Some(CalEvent {
         id,
         account_id: account_id.to_string(),
@@ -525,6 +625,7 @@ fn parse_event(event: EventResource, account_id: &str, calendar_id: &str) -> Opt
         description: event.description,
         color: event.color_id.as_deref().and_then(color_id_to_hex),
         conference_url,
+        attendees,
     })
 }
 
@@ -678,6 +779,7 @@ mod tests {
             color_id: None,
             status: Some("confirmed".to_string()),
             conference_data: None,
+            attendees: None,
         };
 
         let cal_event = parse_event(event, "acct1", "primary").unwrap();
@@ -687,6 +789,7 @@ mod tests {
         assert_eq!(cal_event.calendar_id, "primary");
         assert!(!cal_event.all_day);
         assert_eq!(cal_event.location.as_deref(), Some("Room A"));
+        assert!(cal_event.attendees.is_empty());
     }
 
     #[test]
@@ -707,6 +810,7 @@ mod tests {
             color_id: None,
             status: Some("cancelled".to_string()),
             conference_data: None,
+            attendees: None,
         };
 
         // Cancelled events should be filtered in fetch_events; here verify
@@ -729,6 +833,7 @@ mod tests {
                 description: None,
                 color: None,
                 conference_url: None,
+                attendees: vec![],
             },
             CalEvent {
                 id: "e2".to_string(),
@@ -742,6 +847,7 @@ mod tests {
                 description: None,
                 color: None,
                 conference_url: None,
+                attendees: vec![],
             },
         ];
 
@@ -818,6 +924,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            false,
         );
 
         let json: serde_json::Value = serde_json::to_value(&body).unwrap();
@@ -827,6 +935,8 @@ mod tests {
         assert!(json["start"].get("date").is_none());
         assert_eq!(json["location"], "Room A");
         assert!(json.get("description").is_none()); // skipped via skip_serializing_if
+        assert!(json.get("attendees").is_none());
+        assert!(json.get("conferenceData").is_none());
     }
 
     #[test]
@@ -856,6 +966,8 @@ mod tests {
             Some("Day off"),
             None,
             None,
+            None,
+            false,
         );
 
         let json: serde_json::Value = serde_json::to_value(&body).unwrap();
@@ -866,6 +978,8 @@ mod tests {
         assert!(json["start"].get("timeZone").is_none());
         assert!(json.get("location").is_none());
         assert_eq!(json["description"], "Day off");
+        assert!(json.get("attendees").is_none());
+        assert!(json.get("conferenceData").is_none());
     }
 
     #[test]

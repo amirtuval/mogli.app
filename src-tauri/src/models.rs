@@ -33,6 +33,17 @@ pub struct Calendar {
     pub primary: bool,
 }
 
+/// A calendar event attendee.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct Attendee {
+    pub email: String,
+    pub display_name: Option<String>,
+    pub response_status: Option<String>,
+    pub is_optional: bool,
+    pub is_organizer: bool,
+    pub is_self: bool,
+}
+
 /// Calendar event.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct CalEvent {
@@ -47,6 +58,7 @@ pub struct CalEvent {
     pub description: Option<String>,
     pub color: Option<String>,
     pub conference_url: Option<String>,
+    pub attendees: Vec<Attendee>,
 }
 
 /// Message metadata — never stores body.
