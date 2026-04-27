@@ -98,8 +98,8 @@ describe('EventModal', () => {
       <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
     )
 
-    const dateInput = screen.getByDisplayValue('2026-03-15')
-    expect(dateInput).toBeInTheDocument()
+    const dateInputs = screen.getAllByDisplayValue('2026-03-15')
+    expect(dateInputs).toHaveLength(2) // start date + end date
 
     const startInput = screen.getByDisplayValue('10:00')
     expect(startInput).toBeInTheDocument()

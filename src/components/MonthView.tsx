@@ -80,16 +80,21 @@ export default function MonthView({
 
   const isCurrentMonth = (d: Date) => d.getFullYear() === viewYear && d.getMonth() === viewMonth - 1
 
-  // Group events by date key "YYYY-MM-DD"
+  // Group events by date key "YYYY-MM-DD", spanning all days for multi-day events
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalEvent[]>()
     if (!events) return map
     for (const ev of events) {
-      const d = new Date(ev.start * 1000)
-      const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-      const list = map.get(key) ?? []
-      list.push(ev)
-      map.set(key, list)
+      const startD = new Date(ev.start * 1000)
+      // Iterate each day the event spans
+      const cursor = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
+      while (cursor.getTime() / 1000 < ev.end) {
+        const key = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}-${pad2(cursor.getDate())}`
+        const list = map.get(key) ?? []
+        list.push(ev)
+        map.set(key, list)
+        cursor.setDate(cursor.getDate() + 1)
+      }
     }
     return map
   }, [events])
@@ -103,6 +108,19 @@ export default function MonthView({
       const startTimeStr = `${pad2(startDate.getHours())}:${pad2(startDate.getMinutes())}`
       const endTimeStr = `${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`
 
+      const isAllDay = ev.all_day || ev.end - ev.start >= 86400
+      // Compute the end date string. For all-day events Google uses an
+      // exclusive end, so subtract one day to get the inclusive end date.
+      // For timed events use the end timestamp date directly.
+      let endDateStr: string
+      if (isAllDay) {
+        const lastDay = new Date(ev.end * 1000)
+        lastDay.setDate(lastDay.getDate() - 1)
+        endDateStr = `${lastDay.getFullYear()}-${pad2(lastDay.getMonth() + 1)}-${pad2(lastDay.getDate())}`
+      } else {
+        endDateStr = `${endDate.getFullYear()}-${pad2(endDate.getMonth() + 1)}-${pad2(endDate.getDate())}`
+      }
+
       openEventModal({
         mode: 'edit',
         date: dateStr,
@@ -112,7 +130,8 @@ export default function MonthView({
         accountId: ev.account_id,
         calendarId: ev.calendar_id,
         title: ev.title,
-        allDay: ev.all_day || ev.end - ev.start >= 86400,
+        allDay: isAllDay,
+        endDate: endDateStr,
         location: ev.location ?? undefined,
         description: ev.description ?? undefined,
         conferenceUrl: ev.conference_url ?? undefined,

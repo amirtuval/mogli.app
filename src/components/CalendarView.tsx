@@ -304,6 +304,19 @@ export default function CalendarView({
       const startTimeStr = `${pad2(startDate.getHours())}:${pad2(startDate.getMinutes())}`
       const endTimeStr = `${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`
 
+      const isAllDay = ev.all_day || ev.end - ev.start >= 86400
+      // Compute the end date string. For all-day events Google uses an
+      // exclusive end, so subtract one day to get the inclusive end date.
+      // For timed events use the end timestamp date directly.
+      let endDateStr: string
+      if (isAllDay) {
+        const lastDay = new Date(ev.end * 1000)
+        lastDay.setDate(lastDay.getDate() - 1)
+        endDateStr = `${lastDay.getFullYear()}-${pad2(lastDay.getMonth() + 1)}-${pad2(lastDay.getDate())}`
+      } else {
+        endDateStr = `${endDate.getFullYear()}-${pad2(endDate.getMonth() + 1)}-${pad2(endDate.getDate())}`
+      }
+
       openEventModal({
         mode: 'edit',
         date: dateStr,
@@ -313,7 +326,8 @@ export default function CalendarView({
         accountId: ev.account_id,
         calendarId: ev.calendar_id,
         title: ev.title,
-        allDay: ev.all_day || ev.end - ev.start >= 86400,
+        allDay: isAllDay,
+        endDate: endDateStr,
         location: ev.location ?? undefined,
         description: ev.description ?? undefined,
         conferenceUrl: ev.conference_url ?? undefined,
@@ -516,15 +530,16 @@ export default function CalendarView({
       // return full-day events as timed events spanning midnight-to-midnight)
       const isAllDay = event.all_day || event.end - event.start >= 86400
 
-      // Find which day column(s) this event belongs to
-      const startDate = new Date(event.start * 1000)
+      // Find all day columns this event overlaps with (supports multi-day events)
       for (let i = 0; i < dayCount; i++) {
         const day = weekDays[i]
-        if (
-          startDate.getFullYear() === day.getFullYear() &&
-          startDate.getMonth() === day.getMonth() &&
-          startDate.getDate() === day.getDate()
-        ) {
+        const dayStartTs =
+          new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000
+        const dayEndTs = dayStartTs + 86400
+
+        // Event overlaps this day if it starts before the day ends
+        // and ends after the day starts
+        if (event.start < dayEndTs && event.end > dayStartTs) {
           if (isAllDay) {
             map.get(i)!.allDay.push(event)
           } else {
@@ -741,6 +756,10 @@ export default function CalendarView({
                     const color = eventColor(ev, accounts)
                     const cal = calendars.find((c) => c.id === ev.calendar_id)
                     const acct = accounts.find((a) => a.id === ev.account_id)
+                    const totalDays = Math.ceil((ev.end - ev.start) / 86400)
+                    const dayStartTs =
+                      new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000
+                    const dayOfEvent = Math.floor((dayStartTs - ev.start) / 86400) + 1
                     return (
                       <div
                         key={ev.id}
@@ -753,6 +772,7 @@ export default function CalendarView({
                         onClick={() => openEditModal(ev)}
                       >
                         {ev.title}
+                        {totalDays > 1 && ` · Day ${dayOfEvent}/${totalDays}`}
 
                         {/* Hover popover */}
                         <div className={styles.eventPopover}>

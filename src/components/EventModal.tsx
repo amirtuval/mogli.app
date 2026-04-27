@@ -153,6 +153,7 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
 
   const [titleValue, setTitle] = useState(initial.title ?? '')
   const [date, setDate] = useState(initial.date)
+  const [endDate, setEndDate] = useState(initial.endDate ?? initial.date)
   const [startTime, setStartTime] = useState(initial.startTime)
   const [endTime, setEndTime] = useState(initial.endTime)
   const [allDay, setAllDay] = useState(initial.allDay ?? false)
@@ -277,24 +278,30 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
     void timezone // used later in the invoke call
 
     if (allDay) {
-      const startDate = new Date(`${date}T00:00:00`)
-      const endDate = new Date(startDate)
-      endDate.setDate(endDate.getDate() + 1)
+      if (endDate < date) {
+        setError('End date must be on or after start date')
+        return null
+      }
+      const startD = new Date(`${date}T00:00:00`)
+      // Google Calendar uses exclusive end dates for all-day events,
+      // so add one day to the inclusive end date.
+      const endD = new Date(`${endDate}T00:00:00`)
+      endD.setDate(endD.getDate() + 1)
       return {
-        startTs: Math.floor(startDate.getTime() / 1000),
-        endTs: Math.floor(endDate.getTime() / 1000),
+        startTs: Math.floor(startD.getTime() / 1000),
+        endTs: Math.floor(endD.getTime() / 1000),
       }
     }
 
-    const startDate = new Date(`${date}T${startTime}:00`)
-    const endDate = new Date(`${date}T${endTime}:00`)
-    if (endDate <= startDate) {
-      setError('End time must be after start time')
+    const startD = new Date(`${date}T${startTime}:00`)
+    const endD = new Date(`${endDate}T${endTime}:00`)
+    if (endD <= startD) {
+      setError('End must be after start')
       return null
     }
     return {
-      startTs: Math.floor(startDate.getTime() / 1000),
-      endTs: Math.floor(endDate.getTime() / 1000),
+      startTs: Math.floor(startD.getTime() / 1000),
+      endTs: Math.floor(endD.getTime() / 1000),
     }
   }
 
@@ -440,26 +447,50 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             />
           </div>
 
-          {/* Date */}
-          <div className={styles.field}>
-            <span className={styles.label}>Date</span>
-            <input
-              type="date"
-              className={styles.input}
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-
           {/* All-day toggle */}
           <div className={styles.checkboxRow}>
             <input
               type="checkbox"
               id="allDay"
               checked={allDay}
-              onChange={(e) => setAllDay(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setAllDay(checked)
+                if (checked && endDate < date) {
+                  setEndDate(date)
+                }
+              }}
             />
             <label htmlFor="allDay">All day</label>
+          </div>
+
+          {/* Date fields — always show start + end date */}
+          <div className={styles.row}>
+            <div className={styles.field}>
+              <span className={styles.label}>Start date</span>
+              <input
+                type="date"
+                className={styles.input}
+                value={date}
+                onChange={(e) => {
+                  const newDate = e.target.value
+                  setDate(newDate)
+                  if (endDate < newDate) {
+                    setEndDate(newDate)
+                  }
+                }}
+              />
+            </div>
+            <div className={styles.field}>
+              <span className={styles.label}>End date</span>
+              <input
+                type="date"
+                className={styles.input}
+                value={endDate}
+                min={date}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
           </div>
 
           {/* Time pickers — hidden when all-day */}
