@@ -58,6 +58,7 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::gmail::search_messages,
         commands::gmail::send_message,
         commands::gmail::batch_modify_threads,
+        commands::gmail::get_inbox_unread_count,
         commands::calendar::list_calendars,
         commands::calendar::set_calendar_enabled,
         commands::calendar::get_account_events,
