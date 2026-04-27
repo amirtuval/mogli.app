@@ -112,6 +112,23 @@ export default function ComposeModal({ accounts }: ComposeModalProps) {
     if (e.target === e.currentTarget) closeCompose()
   }
 
+  // Keyboard shortcuts: Escape → close, Ctrl/Cmd+Enter → send
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeCompose()
+      }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        if (!sending && to.trim()) {
+          void handleSend()
+        }
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  })
+
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick} data-testid="compose-backdrop">
       <div className={styles.modal}>

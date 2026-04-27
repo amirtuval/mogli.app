@@ -422,6 +422,23 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
     if (e.target === e.currentTarget) closeEventModal()
   }
 
+  // Keyboard shortcuts: Escape → close, Ctrl/Cmd+Enter → save
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeEventModal()
+      }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        if (!sending) {
+          void handleSave()
+        }
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  })
+
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick}>
       <div className={styles.modal}>

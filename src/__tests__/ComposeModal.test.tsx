@@ -187,4 +187,57 @@ describe('ComposeModal', () => {
 
     expect(screen.getByText('personal@test.com')).toBeInTheDocument()
   })
+
+  it('should close compose when Escape key is pressed', async () => {
+    const user = userEvent.setup()
+    useUIStore.setState({ composeContext: { mode: 'new' } })
+
+    renderWithQuery(<ComposeModal accounts={MOCK_ACCOUNTS} />)
+
+    await user.keyboard('{Escape}')
+
+    expect(useUIStore.getState().showCompose).toBe(false)
+    expect(useUIStore.getState().composeContext).toBeNull()
+  })
+
+  it('should send message when Ctrl+Enter is pressed', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(undefined)
+
+    useUIStore.setState({
+      composeContext: {
+        mode: 'reply',
+        threadId: 't1',
+        accountId: 'a1',
+        to: 'alice@example.com',
+        subject: 'Hello',
+        body: '',
+      },
+    })
+
+    renderWithQuery(<ComposeModal accounts={MOCK_ACCOUNTS} />)
+
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('send_message', {
+        request: expect.objectContaining({
+          account_id: 'a1',
+          to: ['alice@example.com'],
+          subject: 'Re: Hello',
+        }),
+      })
+    })
+  })
+
+  it('should not send when Ctrl+Enter is pressed with empty To field', async () => {
+    const user = userEvent.setup()
+    useUIStore.setState({ composeContext: { mode: 'new' } })
+
+    renderWithQuery(<ComposeModal accounts={MOCK_ACCOUNTS} />)
+
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(mockedInvoke).not.toHaveBeenCalled()
+  })
 })
