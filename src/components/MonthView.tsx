@@ -85,15 +85,31 @@ export default function MonthView({
     const map = new Map<string, CalEvent[]>()
     if (!events) return map
     for (const ev of events) {
-      const startD = new Date(ev.start * 1000)
-      // Iterate each day the event spans
-      const cursor = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
-      while (cursor.getTime() / 1000 < ev.end) {
-        const key = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}-${pad2(cursor.getDate())}`
-        const list = map.get(key) ?? []
-        list.push(ev)
-        map.set(key, list)
-        cursor.setDate(cursor.getDate() + 1)
+      const isAllDay = ev.all_day || ev.end - ev.start >= 86400
+      if (isAllDay) {
+        // All-day event timestamps are UTC midnight — compare in UTC
+        const startD = new Date(ev.start * 1000)
+        const cursor = new Date(
+          Date.UTC(startD.getUTCFullYear(), startD.getUTCMonth(), startD.getUTCDate()),
+        )
+        while (cursor.getTime() / 1000 < ev.end) {
+          const key = `${cursor.getUTCFullYear()}-${pad2(cursor.getUTCMonth() + 1)}-${pad2(cursor.getUTCDate())}`
+          const list = map.get(key) ?? []
+          list.push(ev)
+          map.set(key, list)
+          cursor.setUTCDate(cursor.getUTCDate() + 1)
+        }
+      } else {
+        // Timed events — use local time
+        const startD = new Date(ev.start * 1000)
+        const cursor = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
+        while (cursor.getTime() / 1000 < ev.end) {
+          const key = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}-${pad2(cursor.getDate())}`
+          const list = map.get(key) ?? []
+          list.push(ev)
+          map.set(key, list)
+          cursor.setDate(cursor.getDate() + 1)
+        }
       }
     }
     return map

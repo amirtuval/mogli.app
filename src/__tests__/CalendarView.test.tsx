@@ -364,8 +364,8 @@ describe('CalendarView', () => {
       makeEvent({
         id: 'multi1',
         title: 'Conference',
-        start: new Date('2026-03-04T00:00:00').getTime() / 1000,
-        end: new Date('2026-03-07T00:00:00').getTime() / 1000,
+        start: new Date('2026-03-04T00:00:00Z').getTime() / 1000,
+        end: new Date('2026-03-07T00:00:00Z').getTime() / 1000,
         all_day: true,
       }),
     ]
@@ -384,14 +384,43 @@ describe('CalendarView', () => {
     expect(conferenceEls.length).toBe(3)
   })
 
+  it('does not spill single-day all-day event into the next day (exclusive end date)', () => {
+    // Google Calendar uses exclusive end dates: a single-day event on Wed Mar 4
+    // has start=2026-03-04T00:00:00Z and end=2026-03-05T00:00:00Z.
+    // In positive-UTC-offset timezones, local midnight is earlier than UTC midnight,
+    // which previously caused the event to also appear on Thursday.
+    const events = [
+      makeEvent({
+        id: 'single-ad',
+        title: 'Single Day Off',
+        start: new Date('2026-03-04T00:00:00Z').getTime() / 1000,
+        end: new Date('2026-03-05T00:00:00Z').getTime() / 1000,
+        all_day: true,
+      }),
+    ]
+
+    const { container } = render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    const allDayEls = container.querySelectorAll('[class*="allDayEvent"]')
+    const matchingEls = Array.from(allDayEls).filter((el) =>
+      el.textContent?.includes('Single Day Off'),
+    )
+    // Must appear in exactly 1 day column, not 2
+    expect(matchingEls.length).toBe(1)
+  })
+
   it('renders multi-day event that starts before the visible week', () => {
     // Event starts on Sunday Mar 1 (before the Monday start) and ends Wed Mar 4
     const events = [
       makeEvent({
         id: 'pre-week',
         title: 'Sprint',
-        start: new Date('2026-03-01T00:00:00').getTime() / 1000,
-        end: new Date('2026-03-05T00:00:00').getTime() / 1000,
+        start: new Date('2026-03-01T00:00:00Z').getTime() / 1000,
+        end: new Date('2026-03-05T00:00:00Z').getTime() / 1000,
         all_day: true,
       }),
     ]

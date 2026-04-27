@@ -534,21 +534,23 @@ export default function CalendarView({
 
     if (!events) return map
 
-    for (const event of events) {
-      // Treat events spanning 24h+ as all-day (some holiday calendars
-      // return full-day events as timed events spanning midnight-to-midnight)
-      const isAllDay = event.all_day || event.end - event.start >= 86400
+    // Iterate days in outer loop so boundaries are computed once per column.
+    // All-day events use UTC boundaries (Google returns UTC-midnight timestamps);
+    // timed events use local boundaries.
+    for (let i = 0; i < dayCount; i++) {
+      const day = weekDays[i]
+      const dayStartLocal =
+        new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000
+      const dayEndLocal = dayStartLocal + 86400
+      const dayStartUtc = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()) / 1000
+      const dayEndUtc = dayStartUtc + 86400
 
-      // Find all day columns this event overlaps with (supports multi-day events)
-      for (let i = 0; i < dayCount; i++) {
-        const day = weekDays[i]
-        const dayStartTs =
-          new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000
-        const dayEndTs = dayStartTs + 86400
+      for (const event of events) {
+        const isAllDay = event.all_day || event.end - event.start >= 86400
+        const ds = isAllDay ? dayStartUtc : dayStartLocal
+        const de = isAllDay ? dayEndUtc : dayEndLocal
 
-        // Event overlaps this day if it starts before the day ends
-        // and ends after the day starts
-        if (event.start < dayEndTs && event.end > dayStartTs) {
+        if (event.start < de && event.end > ds) {
           if (isAllDay) {
             map.get(i)!.allDay.push(event)
           } else {
