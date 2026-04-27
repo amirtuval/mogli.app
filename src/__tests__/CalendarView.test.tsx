@@ -356,4 +356,54 @@ describe('CalendarView', () => {
     expect(block).toBeDefined()
     expect(block.textContent).toContain('Draggable Event')
   })
+
+  it('renders multi-day all-day events in all spanned day columns', () => {
+    // 3-day event: Wed Mar 4 through Fri Mar 6 (end is exclusive per Google Calendar)
+    const events = [
+      makeEvent({
+        id: 'multi1',
+        title: 'Conference',
+        start: new Date('2026-03-04T00:00:00').getTime() / 1000,
+        end: new Date('2026-03-07T00:00:00').getTime() / 1000,
+        all_day: true,
+      }),
+    ]
+
+    const { container } = render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    // The event should appear in 3 day columns (Wed, Thu, Fri)
+    const allDayEls = container.querySelectorAll('[class*="allDayEvent"]')
+    const conferenceEls = Array.from(allDayEls).filter((el) =>
+      el.textContent?.includes('Conference'),
+    )
+    expect(conferenceEls.length).toBe(3)
+  })
+
+  it('renders multi-day event that starts before the visible week', () => {
+    // Event starts on Sunday Mar 1 (before the Monday start) and ends Wed Mar 4
+    const events = [
+      makeEvent({
+        id: 'pre-week',
+        title: 'Sprint',
+        start: new Date('2026-03-01T00:00:00').getTime() / 1000,
+        end: new Date('2026-03-05T00:00:00').getTime() / 1000,
+        all_day: true,
+      }),
+    ]
+
+    const { container } = render(
+      <Wrapper>
+        <CalendarView events={events} accounts={MOCK_ACCOUNTS} isLoading={false} />
+      </Wrapper>,
+    )
+
+    // Should appear on Mon, Tue, Wed (3 days within the visible week)
+    const allDayEls = container.querySelectorAll('[class*="allDayEvent"]')
+    const sprintEls = Array.from(allDayEls).filter((el) => el.textContent?.includes('Sprint'))
+    expect(sprintEls.length).toBe(3)
+  })
 })

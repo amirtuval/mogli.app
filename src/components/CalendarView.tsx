@@ -516,15 +516,16 @@ export default function CalendarView({
       // return full-day events as timed events spanning midnight-to-midnight)
       const isAllDay = event.all_day || event.end - event.start >= 86400
 
-      // Find which day column(s) this event belongs to
-      const startDate = new Date(event.start * 1000)
+      // Find all day columns this event overlaps with (supports multi-day events)
       for (let i = 0; i < dayCount; i++) {
         const day = weekDays[i]
-        if (
-          startDate.getFullYear() === day.getFullYear() &&
-          startDate.getMonth() === day.getMonth() &&
-          startDate.getDate() === day.getDate()
-        ) {
+        const dayStartTs =
+          new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000
+        const dayEndTs = dayStartTs + 86400
+
+        // Event overlaps this day if it starts before the day ends
+        // and ends after the day starts
+        if (event.start < dayEndTs && event.end > dayStartTs) {
           if (isAllDay) {
             map.get(i)!.allDay.push(event)
           } else {
