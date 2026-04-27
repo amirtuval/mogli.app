@@ -87,7 +87,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => {
-                if let Some(window) = app.webview_windows().values().next() {
+                if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.unminimize();
                     let _ = window.set_focus();
@@ -105,7 +105,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             } = event
             {
                 let app = tray.app_handle();
-                if let Some(window) = app.webview_windows().values().next() {
+                if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.unminimize();
                     let _ = window.set_focus();
@@ -147,6 +147,7 @@ pub fn run() {
                         "window-state.json"
                     }
                 })
+                .with_denylist(&["reminder-popup"])
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
@@ -160,7 +161,7 @@ pub fn run() {
             #[cfg(not(debug_assertions))]
             {
                 tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                    if let Some(window) = app.webview_windows().values().next() {
+                    if let Some(window) = app.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.unminimize();
                         let _ = window.set_focus();
@@ -198,11 +199,18 @@ pub fn run() {
 
             // In debug builds, prefix the window title so dev is visually distinct
             #[cfg(debug_assertions)]
-            if let Some(window) = app.webview_windows().values().next() {
+            if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_title("[DEV] Mogly");
             }
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event
+                && window.label() == "main"
+            {
+                window.app_handle().exit(0);
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
