@@ -511,6 +511,8 @@ describe('EventModal', () => {
       eventModalDefaults: {
         mode: 'edit',
         date: '2026-03-15',
+        startTime: '00:00',
+        endTime: '23:59',
         allDay: true,
         eventId: 'ev1',
         accountId: 'a1',
