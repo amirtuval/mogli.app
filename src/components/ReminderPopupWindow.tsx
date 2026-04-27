@@ -54,7 +54,7 @@ export default function ReminderPopupWindow() {
       hadRemindersRef.current = true
     } else if (hadRemindersRef.current) {
       getCurrentWindow()
-        .hide()
+        .close()
         .catch(() => {
           // Window may already be closed
         })
