@@ -341,4 +341,149 @@ describe('EventModal', () => {
 
     expect(screen.getByText('Title is required')).toBeInTheDocument()
   })
+
+  it('should render the Guests section with input', () => {
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    expect(screen.getByText('Guests')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Add guest email')).toBeInTheDocument()
+    expect(screen.getByText('Add')).toBeInTheDocument()
+  })
+
+  it('should add and remove guests', async () => {
+    const user = userEvent.setup()
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    const guestInput = screen.getByPlaceholderText('Add guest email')
+
+    await user.type(guestInput, 'alice@example.com')
+    await user.click(screen.getByText('Add'))
+
+    expect(screen.getByText('alice@example.com')).toBeInTheDocument()
+    expect((guestInput as HTMLInputElement).value).toBe('')
+
+    // Add another guest
+    await user.type(guestInput, 'bob@example.com')
+    await user.click(screen.getByText('Add'))
+
+    expect(screen.getByText('bob@example.com')).toBeInTheDocument()
+
+    // Remove first guest using the ✕ button next to their email
+    const removeButtons = screen
+      .getAllByText('✕')
+      .filter((btn) => btn.classList.toString().includes('removeGuest'))
+    expect(removeButtons.length).toBe(2)
+
+    await user.click(removeButtons[0])
+    expect(screen.queryByText('alice@example.com')).not.toBeInTheDocument()
+    expect(screen.getByText('bob@example.com')).toBeInTheDocument()
+  })
+
+  it('should not add duplicate or invalid guest emails', async () => {
+    const user = userEvent.setup()
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    const guestInput = screen.getByPlaceholderText('Add guest email')
+
+    // Add a valid guest
+    await user.type(guestInput, 'alice@example.com')
+    await user.click(screen.getByText('Add'))
+    expect(screen.getByText('alice@example.com')).toBeInTheDocument()
+
+    // Try adding the same email again
+    await user.type(guestInput, 'alice@example.com')
+    await user.click(screen.getByText('Add'))
+    // Should still only appear once
+    const matches = screen.getAllByText('alice@example.com')
+    expect(matches.length).toBe(1)
+
+    // Try adding an invalid email
+    await user.type(guestInput, 'not-an-email')
+    await user.click(screen.getByText('Add'))
+    expect(screen.queryByText('not-an-email')).not.toBeInTheDocument()
+  })
+
+  it('should add guest via Enter key', async () => {
+    const user = userEvent.setup()
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    const guestInput = screen.getByPlaceholderText('Add guest email')
+
+    await user.type(guestInput, 'carol@example.com{Enter}')
+    expect(screen.getByText('carol@example.com')).toBeInTheDocument()
+  })
+
+  it('should render the Google Meet conference toggle', () => {
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    expect(screen.getByText('Video call')).toBeInTheDocument()
+    expect(screen.getByLabelText('Add Google Meet video conferencing')).toBeInTheDocument()
+  })
+
+  it('should show conference join link in edit mode when URL exists', () => {
+    useUIStore.setState({
+      showEventModal: true,
+      eventModalDefaults: {
+        mode: 'edit',
+        date: '2026-03-15',
+        startTime: '10:00',
+        endTime: '11:00',
+        eventId: 'ev1',
+        accountId: 'a1',
+        calendarId: 'cal1',
+        title: 'Meeting',
+        conferenceUrl: 'https://meet.google.com/abc-defg-hij',
+      },
+    })
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    expect(screen.getByText('▶ Join video call')).toBeInTheDocument()
+    // The toggle should not be shown when a conference URL already exists
+    expect(screen.queryByLabelText('Add Google Meet video conferencing')).not.toBeInTheDocument()
+  })
+
+  it('should show existing attendees in edit mode', () => {
+    useUIStore.setState({
+      showEventModal: true,
+      eventModalDefaults: {
+        mode: 'edit',
+        date: '2026-03-15',
+        startTime: '10:00',
+        endTime: '11:00',
+        eventId: 'ev1',
+        accountId: 'a1',
+        calendarId: 'cal1',
+        title: 'Team Meeting',
+        attendees: [
+          { email: 'alice@test.com', displayName: 'Alice', responseStatus: 'accepted' },
+          { email: 'bob@test.com', responseStatus: 'needsAction' },
+        ],
+      },
+    })
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    expect(screen.getByText('Alice (alice@test.com)')).toBeInTheDocument()
+    expect(screen.getByText('bob@test.com')).toBeInTheDocument()
+    expect(screen.getByText('accepted')).toBeInTheDocument()
+    expect(screen.getByText('needsAction')).toBeInTheDocument()
+  })
 })

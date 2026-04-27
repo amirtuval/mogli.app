@@ -183,6 +183,27 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
     return [makeDefaultReminder()]
   })
 
+  // Attendees (guests)
+  const [guests, setGuests] = useState<
+    Array<{ email: string; displayName?: string; responseStatus?: string }>
+  >(initial.attendees ?? [])
+  const [guestInput, setGuestInput] = useState('')
+
+  // Google Meet conferencing toggle
+  const [addConference, setAddConference] = useState(false)
+
+  const addGuest = useCallback(() => {
+    const email = guestInput.trim().toLowerCase()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return
+    if (guests.some((g) => g.email === email)) return
+    setGuests((prev) => [...prev, { email }])
+    setGuestInput('')
+  }, [guestInput, guests])
+
+  const removeGuest = useCallback((email: string) => {
+    setGuests((prev) => prev.filter((g) => g.email !== email))
+  }, [])
+
   // Calendar selector state
   const enabledCalendars = useMemo(() => calendars.filter((c) => c.enabled), [calendars])
   const defaultCalendar = useMemo(() => {
@@ -339,6 +360,11 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
     const recurrenceRules = buildRecurrence()
     const reminderMins = buildReminderMinutes()
 
+    const guestPayload =
+      guests.length > 0
+        ? guests.map((g) => ({ email: g.email, name: g.displayName ?? null }))
+        : null
+
     try {
       if (isEdit && initial.eventId) {
         await invoke('update_event', {
@@ -355,6 +381,8 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             description: description.trim() || null,
             recurrence: recurrenceRules,
             reminder_minutes: reminderMins,
+            attendees: guestPayload,
+            add_conference: addConference,
           },
         })
       } else {
@@ -371,6 +399,8 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             description: description.trim() || null,
             recurrence: recurrenceRules,
             reminder_minutes: reminderMins,
+            attendees: guestPayload,
+            add_conference: addConference,
           },
         })
       }
@@ -636,10 +666,10 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             )}
           </div>
 
-          {/* Conference link (read-only, edit mode only) */}
-          {isEdit && initial.conferenceUrl && (
-            <div className={styles.field}>
-              <span className={styles.label}>Video call</span>
+          {/* Video conferencing */}
+          <div className={styles.field}>
+            <span className={styles.label}>Video call</span>
+            {isEdit && initial.conferenceUrl ? (
               <div className={styles.readonlyValue}>
                 <a
                   href={initial.conferenceUrl}
@@ -654,8 +684,61 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
                   ▶ Join video call
                 </a>
               </div>
+            ) : (
+              <div className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  id="addConference"
+                  checked={addConference}
+                  onChange={(e) => setAddConference(e.target.checked)}
+                />
+                <label htmlFor="addConference">Add Google Meet video conferencing</label>
+              </div>
+            )}
+          </div>
+
+          {/* Guests (attendees) */}
+          <div className={styles.field}>
+            <span className={styles.label}>Guests</span>
+            <div className={styles.guestInputRow}>
+              <input
+                className={styles.input}
+                value={guestInput}
+                onChange={(e) => setGuestInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addGuest()
+                  }
+                }}
+                placeholder="Add guest email"
+              />
+              <button type="button" className={styles.addGuestBtn} onClick={addGuest}>
+                Add
+              </button>
             </div>
-          )}
+            {guests.length > 0 && (
+              <div className={styles.guestList}>
+                {guests.map((g) => (
+                  <div key={g.email} className={styles.guestChip}>
+                    <span className={styles.guestEmail}>
+                      {g.displayName ? `${g.displayName} (${g.email})` : g.email}
+                    </span>
+                    {g.responseStatus && (
+                      <span className={styles.guestStatus}>{g.responseStatus}</span>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.removeGuestBtn}
+                      onClick={() => removeGuest(g.email)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Description (collapsible) */}
           {!showDesc ? (

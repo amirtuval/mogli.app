@@ -60,6 +60,15 @@ export interface Calendar {
   primary: boolean
 }
 
+export interface Attendee {
+  email: string
+  display_name: string | null
+  response_status: string | null
+  is_optional: boolean
+  is_organizer: boolean
+  is_self: boolean
+}
+
 export interface CalEvent {
   id: string
   account_id: string
@@ -72,6 +81,7 @@ export interface CalEvent {
   description: string | null
   color: string | null
   conference_url: string | null
+  attendees: Attendee[]
 }
 
 export interface SendMessageRequest {
