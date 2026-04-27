@@ -314,4 +314,31 @@ describe('EventModal', () => {
 
     expect(startInput.value).toBe('10:00')
   })
+
+  it('should close modal when Escape key is pressed', async () => {
+    const user = userEvent.setup()
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    await user.keyboard('{Escape}')
+
+    const state = useUIStore.getState()
+    expect(state.showEventModal).toBe(false)
+    expect(state.eventModalDefaults).toBeNull()
+  })
+
+  it('should attempt save when Ctrl+Enter is pressed', async () => {
+    const user = userEvent.setup()
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    // With empty title, Ctrl+Enter should trigger validation error
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(screen.getByText('Title is required')).toBeInTheDocument()
+  })
 })
