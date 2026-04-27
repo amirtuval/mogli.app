@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
-import { listen } from '@tauri-apps/api/event'
 import type { Account, Calendar } from '../types/models'
 import { MAIL_LABELS } from '../types/models'
 import type { Theme, AppView, WeekStartDay } from '../store/uiStore'
@@ -41,17 +40,6 @@ export default function Sidebar({ accounts, unreadCount, calendars }: SidebarPro
     getVersion()
       .then(setVersion)
       .catch(() => {})
-  }, [])
-
-  // Listen for backend auth-expired events and refresh the account list
-  useEffect(() => {
-    const unlisten = listen('account:auth_expired', () => {
-      // The accounts query will be invalidated automatically via the query cache,
-      // but we trigger a re-render to show the warning indicator
-    })
-    return () => {
-      unlisten.then((fn) => fn())
-    }
   }, [])
 
   const handleDelete = useCallback(

@@ -25,6 +25,7 @@ import TopBar from './components/TopBar'
 import MailView from './components/MailView'
 import CalendarView from './components/CalendarView'
 import MonthView from './components/MonthView'
+import AuthExpiredBanner from './components/AuthExpiredBanner'
 import NotificationBanner from './components/NotificationBanner'
 import UpdateBanner from './components/UpdateBanner'
 import ComposeModal from './components/ComposeModal'
@@ -123,6 +124,21 @@ function AppShell() {
     }
   }, [])
 
+  // Listen for backend auth-expired events and refresh all queries so the
+  // Sidebar shows the re-authenticate button without requiring a restart.
+  useEffect(() => {
+    const unlisten = listen('account:auth_expired', () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['messages'] })
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+      queryClient.invalidateQueries({ queryKey: ['calendars'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadCount'] })
+    })
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
   // Listen for notification:open_thread events to pre-select a thread.
   // Don't switch the active view — the event fires for every new message
   // during background sync, not only when the user clicks a notification.
@@ -199,6 +215,7 @@ function AppShell() {
       >
         <UpdateBanner />
         <NotificationBanner />
+        <AuthExpiredBanner accounts={accounts} />
         <TopBar activeAccounts={activeAccountObjects} />
         {activeView === 'mail' && (
           <MailView
