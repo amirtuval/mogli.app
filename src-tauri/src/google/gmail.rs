@@ -763,6 +763,46 @@ pub async fn fetch_profile_history_id(
         .ok_or_else(|| "Gmail profile missing historyId".to_string())
 }
 
+// --- Label info response type ---
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LabelInfo {
+    threads_unread: Option<u32>,
+}
+
+/// Fetch the number of unread threads in the INBOX label for the given account.
+///
+/// Uses the Gmail Labels API (`GET .../labels/INBOX`) which returns accurate
+/// server-side counts, avoiding the need to page through all messages.
+pub async fn fetch_inbox_unread_count(
+    creds: &OAuthCredentials,
+    email: &str,
+) -> Result<u32, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let url = format!("{GMAIL_BASE_URL}/users/me/labels/INBOX");
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| format!("Gmail label request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Gmail label fetch failed: {body}"));
+    }
+
+    let label: LabelInfo = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse label info: {e}"))?;
+
+    Ok(label.threads_unread.unwrap_or(0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1080,5 +1120,19 @@ mod tests {
         // Should decode back to original
         let decoded = URL_SAFE_NO_PAD.decode(&encoded).unwrap();
         assert_eq!(String::from_utf8(decoded).unwrap(), raw);
+    }
+
+    #[test]
+    fn test_label_info_deserialise() {
+        let json = r#"{"id":"INBOX","name":"INBOX","type":"system","threadsUnread":42,"messagesUnread":57}"#;
+        let label: LabelInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(label.threads_unread, Some(42));
+    }
+
+    #[test]
+    fn test_label_info_missing_unread() {
+        let json = r#"{"id":"INBOX","name":"INBOX","type":"system"}"#;
+        let label: LabelInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(label.threads_unread, None);
     }
 }

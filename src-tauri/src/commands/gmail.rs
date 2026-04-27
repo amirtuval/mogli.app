@@ -290,3 +290,34 @@ pub async fn batch_modify_threads(
         ))
     }
 }
+
+/// Get the total number of unread inbox threads across the given accounts.
+///
+/// Uses the Gmail Labels API for accurate server-side counts instead of
+/// deriving the count from the limited set of fetched messages.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_inbox_unread_count(
+    app: AppHandle,
+    account_ids: Vec<String>,
+) -> Result<u32, String> {
+    let creds = OAuthCredentials::load()?;
+    let mut join_set = tokio::task::JoinSet::new();
+
+    for account_id in account_ids {
+        let email = get_account_email(&app, &account_id)?;
+        let creds = creds.clone();
+        join_set.spawn(async move { gmail_api::fetch_inbox_unread_count(&creds, &email).await });
+    }
+
+    let mut total: u32 = 0;
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(count)) => total = total.saturating_add(count),
+            Ok(Err(e)) => log::error!("Failed to fetch unread count: {e}"),
+            Err(e) => log::error!("Unread count task panicked: {e}"),
+        }
+    }
+
+    Ok(total)
+}

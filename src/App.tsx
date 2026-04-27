@@ -18,6 +18,7 @@ import { useMessages } from './hooks/useMessages'
 import { useSearchMessages } from './hooks/useSearchMessages'
 import { useAllCalendars } from './hooks/useCalendars'
 import { useEvents } from './hooks/useEvents'
+import { useUnreadCount } from './hooks/useUnreadCount'
 import WelcomePage from './components/WelcomePage'
 import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
@@ -111,10 +112,11 @@ function AppShell() {
     }
   }, [accounts, activeAccounts.length, setActiveAccounts])
 
-  // Listen for background sync events to refresh messages
+  // Listen for background sync events to refresh messages and unread count
   useEffect(() => {
     const unlisten = listen('mail:new', () => {
       queryClient.invalidateQueries({ queryKey: ['messages'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadCount'] })
     })
     return () => {
       unlisten.then((fn) => fn())
@@ -152,10 +154,8 @@ function AppShell() {
     [accounts, activeAccounts],
   )
 
-  const unreadCount = useMemo(
-    () => messages?.filter((m) => m.unread && activeAccounts.includes(m.account_id)).length ?? 0,
-    [messages, activeAccounts],
-  )
+  // Accurate unread count from Gmail Labels API (server-side)
+  const { data: unreadCount = 0 } = useUnreadCount(healthyAccountIds)
 
   // Update tray tooltip with unread count
   useEffect(() => {
