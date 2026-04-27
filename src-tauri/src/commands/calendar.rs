@@ -180,7 +180,6 @@ pub async fn create_event(
         rest.recurrence.as_deref(),
         rest.reminder_minutes.as_deref(),
         attendee_models.as_deref(),
-        rest.add_conference.unwrap_or(false),
     )
     .await
 }
@@ -235,7 +234,6 @@ pub async fn update_event(
         rest.recurrence.as_deref(),
         rest.reminder_minutes.as_deref(),
         attendee_models.as_deref(),
-        rest.add_conference.unwrap_or(false),
     )
     .await
 }
@@ -254,6 +252,61 @@ pub async fn delete_event(
     calendar_api::delete_event(&creds, &email, &calendar_id, &event_id).await
 }
 
+/// Query the Google Calendar `FreeBusy` API for guest availability.
+///
+/// For each email that belongs to a connected Mogly account, queries using that
+/// account's own OAuth token so we always get accurate data. Remaining external
+/// emails are queried via the requesting account's token (may return no access).
+#[tauri::command]
+#[specta::specta]
+pub async fn get_freebusy(
+    app: AppHandle,
+    account_id: String,
+    emails: Vec<String>,
+    time_min: i64,
+    time_max: i64,
+) -> Result<Vec<crate::models::FreeBusyResult>, String> {
+    let creds = OAuthCredentials::load()?;
+    let all_accounts = store::load_accounts(&app)?;
+    let primary_email = store::account_email(&app, &account_id)?;
+
+    // Partition requested emails into connected accounts vs external
+    let mut results: Vec<crate::models::FreeBusyResult> = Vec::new();
+    let mut external_emails: Vec<String> = Vec::new();
+
+    for email in &emails {
+        if let Some(acct) = all_accounts.iter().find(|a| a.email == *email) {
+            // Query this account's own FreeBusy using its own token
+            let mut acct_results = calendar_api::query_freebusy(
+                &creds,
+                &acct.email,
+                time_min,
+                time_max,
+                std::slice::from_ref(email),
+            )
+            .await?;
+            results.append(&mut acct_results);
+        } else {
+            external_emails.push(email.clone());
+        }
+    }
+
+    // Query remaining external emails via the requesting account
+    if !external_emails.is_empty() {
+        let mut ext_results = calendar_api::query_freebusy(
+            &creds,
+            &primary_email,
+            time_min,
+            time_max,
+            &external_emails,
+        )
+        .await?;
+        results.append(&mut ext_results);
+    }
+
+    Ok(results)
+}
+
 /// Attendee input from the frontend.
 #[derive(Debug, serde::Deserialize, specta::Type)]
 pub struct AttendeeInput {
@@ -269,7 +322,6 @@ pub struct CreateEventOptionals {
     pub recurrence: Option<Vec<String>>,
     pub reminder_minutes: Option<Vec<i32>>,
     pub attendees: Option<Vec<AttendeeInput>>,
-    pub add_conference: Option<bool>,
 }
 
 /// Optional fields for `update_event`, bundled to stay within specta's 10-param limit.
@@ -280,7 +332,6 @@ pub struct UpdateEventOptionals {
     pub recurrence: Option<Vec<String>>,
     pub reminder_minutes: Option<Vec<i32>>,
     pub attendees: Option<Vec<AttendeeInput>>,
-    pub add_conference: Option<bool>,
 }
 
 /// Return all currently-active reminder payloads.

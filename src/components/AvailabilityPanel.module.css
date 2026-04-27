@@ -1,0 +1,231 @@
+.panel {
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Day navigation header ── */
+
+.dayNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dayNavLeft {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.navBtn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.navBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dayLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Loading indicator ── */
+
+.loadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-app);
+  opacity: 0.6;
+  z-index: 2;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── Grid layout ── */
+
+.gridWrapper {
+  display: flex;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.labels {
+  width: 100px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+}
+
+.labelSpacer {
+  height: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.labelRow {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* ── Scrollable timeline area ── */
+
+.timelineScroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+}
+
+.timelineInner {
+  position: relative;
+  min-width: max-content;
+}
+
+/* ── Hour header ── */
+
+.hourHeader {
+  display: flex;
+  height: 20px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.hourTick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+  user-select: none;
+  border-left: 1px solid var(--border-light);
+  padding-left: 3px;
+  box-sizing: border-box;
+}
+
+/* ── Rows area ── */
+
+.rowsArea {
+  position: relative;
+  cursor: pointer;
+}
+
+.trackRow {
+  position: relative;
+  height: 28px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* ── No-access overlay ── */
+
+.noAccessOverlay {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    var(--text-muted) 4px,
+    var(--text-muted) 5px
+  );
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+.noAccessIcon {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* ── Busy block ── */
+
+.busyBlock {
+  position: absolute;
+  top: 4px;
+  height: 20px;
+  background: rgba(239, 68, 68, 0.5);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ── Current event overlay ── */
+
+.eventOverlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(79, 156, 249, 0.2);
+  border-left: 2px solid #4f9cf9;
+  border-right: 2px solid #4f9cf9;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dragHandleLeft,
+.dragHandleRight {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.dragHandleLeft {
+  left: -3px;
+}
+
+.dragHandleRight {
+  right: -3px;
+}
+
+/* ── Gridlines ── */
+
+.gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-light);
+  pointer-events: none;
+}

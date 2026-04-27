@@ -44,6 +44,24 @@ pub struct Attendee {
     pub is_self: bool,
 }
 
+/// A busy period returned by the `FreeBusy` API.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct BusyPeriod {
+    pub start: i64,
+    pub end: i64,
+}
+
+/// `FreeBusy` result for a single calendar/email.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct FreeBusyResult {
+    pub calendar_id: String,
+    pub busy: Vec<BusyPeriod>,
+    /// Whether the authenticated user has permission to view this calendar's
+    /// free/busy data. `false` when the Google API returns per-calendar errors
+    /// (e.g. `notFound`).
+    pub has_access: bool,
+}
+
 /// Calendar event.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct CalEvent {

@@ -198,7 +198,6 @@ pub async fn create_event(
     recurrence: Option<&[String]>,
     reminder_minutes: Option<&[i32]>,
     attendees: Option<&[crate::models::Attendee]>,
-    add_conference: bool,
 ) -> Result<CalEvent, String> {
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
@@ -214,7 +213,6 @@ pub async fn create_event(
         recurrence,
         reminder_minutes,
         attendees,
-        add_conference,
     );
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let url = format!("{CALENDAR_BASE_URL}/calendars/{encoded_cal_id}/events");
@@ -222,7 +220,6 @@ pub async fn create_event(
     let resp = client
         .post(&url)
         .bearer_auth(&token)
-        .query(&[("conferenceDataVersion", "1"), ("sendUpdates", "all")])
         .json(&body)
         .send()
         .await
@@ -260,7 +257,6 @@ pub async fn update_event(
     recurrence: Option<&[String]>,
     reminder_minutes: Option<&[i32]>,
     attendees: Option<&[crate::models::Attendee]>,
-    add_conference: bool,
 ) -> Result<CalEvent, String> {
     let token = get_valid_token(creds, email).await?;
     let client = reqwest::Client::new();
@@ -276,7 +272,6 @@ pub async fn update_event(
         recurrence,
         reminder_minutes,
         attendees,
-        add_conference,
     );
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let encoded_event_id = urlencoding::encode(event_id);
@@ -285,7 +280,6 @@ pub async fn update_event(
     let resp = client
         .patch(&url)
         .bearer_auth(&token)
-        .query(&[("conferenceDataVersion", "1"), ("sendUpdates", "all")])
         .json(&body)
         .send()
         .await
@@ -338,6 +332,97 @@ pub async fn delete_event(
     Ok(())
 }
 
+// --- FreeBusy API ---
+
+/// `FreeBusy` response types.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FreeBusyResponse {
+    calendars: Option<std::collections::HashMap<String, FreeBusyCalendar>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FreeBusyCalendar {
+    busy: Option<Vec<FreeBusySlot>>,
+    errors: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FreeBusySlot {
+    start: Option<String>,
+    end: Option<String>,
+}
+
+/// Query `FreeBusy` API for a set of calendar IDs / email addresses.
+pub async fn query_freebusy(
+    creds: &OAuthCredentials,
+    email: &str,
+    time_min: i64,
+    time_max: i64,
+    items: &[String],
+) -> Result<Vec<crate::models::FreeBusyResult>, String> {
+    let token = get_valid_token(creds, email).await?;
+    let client = reqwest::Client::new();
+
+    let time_min_rfc = timestamp_to_rfc3339(time_min);
+    let time_max_rfc = timestamp_to_rfc3339(time_max);
+
+    let body = serde_json::json!({
+        "timeMin": time_min_rfc,
+        "timeMax": time_max_rfc,
+        "items": items.iter().map(|id| serde_json::json!({"id": id})).collect::<Vec<_>>(),
+    });
+
+    let url = format!("{CALENDAR_BASE_URL}/freeBusy");
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("FreeBusy request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("freeBusy.query failed: {text}"));
+    }
+
+    let data: FreeBusyResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse FreeBusy response: {e}"))?;
+
+    let mut results = Vec::new();
+    if let Some(calendars) = data.calendars {
+        for (calendar_id, cal_data) in calendars {
+            let has_errors = cal_data
+                .errors
+                .as_ref()
+                .is_some_and(|errs| !errs.is_empty());
+            let busy_periods: Vec<crate::models::BusyPeriod> = cal_data
+                .busy
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|slot| {
+                    let start = slot.start.as_deref().and_then(parse_datetime)?;
+                    let end = slot.end.as_deref().and_then(parse_datetime)?;
+                    Some(crate::models::BusyPeriod { start, end })
+                })
+                .collect();
+            results.push(crate::models::FreeBusyResult {
+                calendar_id,
+                busy: busy_periods,
+                has_access: !has_errors,
+            });
+        }
+    }
+
+    Ok(results)
+}
+
 // --- Request body types ---
 
 #[derive(Debug, Serialize)]
@@ -356,8 +441,6 @@ struct EventBody {
     reminders: Option<EventRemindersBody>,
     #[serde(skip_serializing_if = "Option::is_none")]
     attendees: Option<Vec<AttendeeBody>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    conference_data: Option<ConferenceDataBody>,
 }
 
 #[derive(Debug, Serialize)]
@@ -395,26 +478,6 @@ struct AttendeeBody {
     optional: Option<bool>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ConferenceDataBody {
-    create_request: ConferenceCreateRequest,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ConferenceCreateRequest {
-    request_id: String,
-    conference_solution_key: ConferenceSolutionKey,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ConferenceSolutionKey {
-    #[serde(rename = "type")]
-    key_type: String,
-}
-
 // --- Helpers ---
 
 #[allow(clippy::too_many_arguments)]
@@ -429,7 +492,6 @@ fn build_event_body(
     recurrence: Option<&[String]>,
     reminder_minutes: Option<&[i32]>,
     attendees: Option<&[crate::models::Attendee]>,
-    add_conference: bool,
 ) -> EventBody {
     let (start_body, end_body) = if all_day {
         let start_date = timestamp_to_date_string(start);
@@ -492,19 +554,6 @@ fn build_event_body(
             .collect()
     });
 
-    let conference_data = if add_conference {
-        Some(ConferenceDataBody {
-            create_request: ConferenceCreateRequest {
-                request_id: uuid::Uuid::new_v4().to_string(),
-                conference_solution_key: ConferenceSolutionKey {
-                    key_type: "hangoutsMeet".to_string(),
-                },
-            },
-        })
-    } else {
-        None
-    };
-
     EventBody {
         summary: title.to_string(),
         start: start_body,
@@ -514,7 +563,6 @@ fn build_event_body(
         recurrence: recurrence.map(<[String]>::to_vec),
         reminders,
         attendees: attendee_bodies,
-        conference_data,
     }
 }
 
@@ -925,7 +973,6 @@ mod tests {
             None,
             None,
             None,
-            false,
         );
 
         let json: serde_json::Value = serde_json::to_value(&body).unwrap();
@@ -936,7 +983,6 @@ mod tests {
         assert_eq!(json["location"], "Room A");
         assert!(json.get("description").is_none()); // skipped via skip_serializing_if
         assert!(json.get("attendees").is_none());
-        assert!(json.get("conferenceData").is_none());
     }
 
     #[test]
@@ -967,7 +1013,6 @@ mod tests {
             None,
             None,
             None,
-            false,
         );
 
         let json: serde_json::Value = serde_json::to_value(&body).unwrap();
@@ -979,7 +1024,6 @@ mod tests {
         assert!(json.get("location").is_none());
         assert_eq!(json["description"], "Day off");
         assert!(json.get("attendees").is_none());
-        assert!(json.get("conferenceData").is_none());
     }
 
     #[test]

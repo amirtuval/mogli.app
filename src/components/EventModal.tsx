@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { Account, Calendar, CalEvent } from '../types/models'
 import { useUIStore } from '../store/uiStore'
 import styles from './EventModal.module.css'
+import AvailabilityPanel from './AvailabilityPanel'
 
 interface EventModalProps {
   accounts: Account[]
@@ -189,9 +190,6 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
   >(initial.attendees ?? [])
   const [guestInput, setGuestInput] = useState('')
 
-  // Google Meet conferencing toggle
-  const [addConference, setAddConference] = useState(false)
-
   const addGuest = useCallback(() => {
     const email = guestInput.trim().toLowerCase()
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return
@@ -203,6 +201,14 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
   const removeGuest = useCallback((email: string) => {
     setGuests((prev) => prev.filter((g) => g.email !== email))
   }, [])
+
+  // FreeBusy availability
+  interface BusyEntry {
+    busy: Array<{ start: number; end: number }>
+    hasAccess: boolean
+  }
+  const [busyData, setBusyData] = useState<Map<string, BusyEntry>>(new Map())
+  const [busyLoading, setBusyLoading] = useState(false)
 
   // Calendar selector state
   const enabledCalendars = useMemo(() => calendars.filter((c) => c.enabled), [calendars])
@@ -382,7 +388,6 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             recurrence: recurrenceRules,
             reminder_minutes: reminderMins,
             attendees: guestPayload,
-            add_conference: addConference,
           },
         })
       } else {
@@ -400,7 +405,6 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
             recurrence: recurrenceRules,
             reminder_minutes: reminderMins,
             attendees: guestPayload,
-            add_conference: addConference,
           },
         })
       }
@@ -469,9 +473,61 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
     return () => document.removeEventListener('keydown', handler)
   })
 
+  // Fetch FreeBusy availability when guests or date change
+  useEffect(() => {
+    if (guests.length === 0 || !selectedAcctId) {
+      setBusyData(new Map())
+      return
+    }
+
+    // Query the full day containing the event
+    const dayStart = new Date(`${date}T00:00:00`)
+    const dayEnd = new Date(`${date}T23:59:59`)
+    const timeMin = Math.floor(dayStart.getTime() / 1000)
+    const timeMax = Math.floor(dayEnd.getTime() / 1000)
+
+    let cancelled = false
+    setBusyLoading(true)
+
+    const organizerEmail = accounts.find((a) => a.id === selectedAcctId)?.email
+    invoke<
+      Array<{
+        calendar_id: string
+        busy: Array<{ start: number; end: number }>
+        has_access: boolean
+      }>
+    >('get_freebusy', {
+      accountId: selectedAcctId,
+      emails: [organizerEmail, ...guests.map((g) => g.email)].filter(Boolean) as string[],
+      timeMin,
+      timeMax,
+    })
+      .then((results) => {
+        if (cancelled) return
+        const map = new Map<string, BusyEntry>()
+        for (const r of results) {
+          map.set(r.calendar_id, { busy: r.busy, hasAccess: r.has_access })
+        }
+        setBusyData(map)
+      })
+      .catch(() => {
+        if (!cancelled) setBusyData(new Map())
+      })
+      .finally(() => {
+        if (!cancelled) setBusyLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guests.map((g) => g.email).join(','), date, selectedAcctId])
+
+  const showAvailability = guests.length > 0 && !allDay
+
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick}>
-      <div className={styles.modal}>
+      <div className={`${styles.modal} ${showAvailability ? styles.modalWide : ''}`}>
         {/* Header */}
         <div className={styles.header}>
           <h2 className={styles.title}>{isEdit ? 'Edit Event' : 'New Event'}</h2>
@@ -480,338 +536,317 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
           </button>
         </div>
 
-        {/* Form */}
-        <div className={styles.form}>
-          {/* Title */}
-          <div className={styles.field}>
-            <span className={styles.label}>Title</span>
-            <input
-              ref={titleRef}
-              className={styles.input}
-              value={titleValue}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Event title"
-            />
-          </div>
-
-          {/* All-day toggle */}
-          <div className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              id="allDay"
-              checked={allDay}
-              onChange={(e) => {
-                const checked = e.target.checked
-                setAllDay(checked)
-                if (checked && endDate < date) {
-                  setEndDate(date)
-                }
-              }}
-            />
-            <label htmlFor="allDay">All day</label>
-          </div>
-
-          {/* Date fields — always show start + end date */}
-          <div className={styles.row}>
+        <div className={styles.body}>
+          {/* Form */}
+          <div className={styles.form}>
+            {/* Title */}
             <div className={styles.field}>
-              <span className={styles.label}>Start date</span>
+              <span className={styles.label}>Title</span>
               <input
-                type="date"
+                ref={titleRef}
                 className={styles.input}
-                value={date}
+                value={titleValue}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Event title"
+              />
+            </div>
+
+            {/* All-day toggle */}
+            <div className={styles.checkboxRow}>
+              <input
+                type="checkbox"
+                id="allDay"
+                checked={allDay}
                 onChange={(e) => {
-                  const newDate = e.target.value
-                  setDate(newDate)
-                  if (endDate < newDate) {
-                    setEndDate(newDate)
+                  const checked = e.target.checked
+                  setAllDay(checked)
+                  if (checked && endDate < date) {
+                    setEndDate(date)
                   }
                 }}
               />
+              <label htmlFor="allDay">All day</label>
             </div>
-            <div className={styles.field}>
-              <span className={styles.label}>End date</span>
-              <input
-                type="date"
-                className={styles.input}
-                value={endDate}
-                min={date}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
 
-          {/* Time pickers — hidden when all-day */}
-          {!allDay && (
+            {/* Date fields — always show start + end date */}
             <div className={styles.row}>
               <div className={styles.field}>
-                <span className={styles.label}>Start</span>
+                <span className={styles.label}>Start date</span>
                 <input
-                  type="time"
+                  type="date"
                   className={styles.input}
-                  value={startTime}
-                  step={900}
+                  value={date}
                   onChange={(e) => {
-                    const newStart = e.target.value
-                    // Preserve duration: compute old duration, apply to new start
-                    const oldStartMin = timeToMinutes(startTime)
-                    const oldEndMin = timeToMinutes(endTime)
-                    const duration = oldEndMin - oldStartMin
-                    const newStartMin = timeToMinutes(newStart)
-                    const newEndMin = Math.min(newStartMin + Math.max(duration, 15), 24 * 60)
-                    setStartTime(newStart)
-                    setEndTime(minutesToTime(newEndMin))
+                    const newDate = e.target.value
+                    setDate(newDate)
+                    if (endDate < newDate) {
+                      setEndDate(newDate)
+                    }
                   }}
                 />
               </div>
               <div className={styles.field}>
-                <span className={styles.label}>End</span>
+                <span className={styles.label}>End date</span>
                 <input
-                  type="time"
+                  type="date"
                   className={styles.input}
-                  value={endTime}
-                  step={900}
-                  onChange={(e) => setEndTime(e.target.value)}
+                  value={endDate}
+                  min={date}
+                  onChange={(e) => setEndDate(e.target.value)}
                 />
               </div>
             </div>
-          )}
 
-          {/* Calendar selector */}
-          <div className={styles.field}>
-            <span className={styles.label}>Calendar</span>
-            <div className={styles.calendarSelect}>
-              <button
-                type="button"
-                className={styles.calendarSelectBtn}
-                onClick={() => setCalDropdownOpen(!calDropdownOpen)}
-              >
-                <span
-                  className={styles.calendarDot}
-                  style={{ background: selectedCal?.color ?? '#4f9cf9' }}
-                />
-                {selectedCal?.name ?? 'Select calendar'}
-              </button>
-              {calDropdownOpen && (
-                <div className={styles.calendarDropdown}>
-                  {[...calendarsByAccount.entries()].map(([acctId, cals]) => {
-                    const acct = accounts.find((a) => a.id === acctId)
-                    return (
-                      <div key={acctId}>
-                        <div className={styles.calendarGroupLabel}>{acct?.email ?? acctId}</div>
-                        {cals.map((cal) => (
-                          <button
-                            key={cal.id}
-                            className={styles.calendarOption}
-                            onClick={() => {
-                              setSelectedCalId(cal.id)
-                              setSelectedAcctId(cal.account_id)
-                              setCalDropdownOpen(false)
-                            }}
-                          >
-                            <span
-                              className={styles.calendarDot}
-                              style={{ background: cal.color }}
-                            />
-                            {cal.name}
-                          </button>
-                        ))}
-                      </div>
-                    )
-                  })}
+            {/* Time pickers — hidden when all-day */}
+            {!allDay && (
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <span className={styles.label}>Start</span>
+                  <input
+                    type="time"
+                    className={styles.input}
+                    value={startTime}
+                    step={900}
+                    onChange={(e) => {
+                      const newStart = e.target.value
+                      // Preserve duration: compute old duration, apply to new start
+                      const oldStartMin = timeToMinutes(startTime)
+                      const oldEndMin = timeToMinutes(endTime)
+                      const duration = oldEndMin - oldStartMin
+                      const newStartMin = timeToMinutes(newStart)
+                      const newEndMin = Math.min(newStartMin + Math.max(duration, 15), 24 * 60)
+                      setStartTime(newStart)
+                      setEndTime(minutesToTime(newEndMin))
+                    }}
+                  />
                 </div>
+                <div className={styles.field}>
+                  <span className={styles.label}>End</span>
+                  <input
+                    type="time"
+                    className={styles.input}
+                    value={endTime}
+                    step={900}
+                    onChange={(e) => setEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Calendar selector */}
+            <div className={styles.field}>
+              <span className={styles.label}>Calendar</span>
+              <div className={styles.calendarSelect}>
+                <button
+                  type="button"
+                  className={styles.calendarSelectBtn}
+                  onClick={() => setCalDropdownOpen(!calDropdownOpen)}
+                >
+                  <span
+                    className={styles.calendarDot}
+                    style={{ background: selectedCal?.color ?? '#4f9cf9' }}
+                  />
+                  {selectedCal?.name ?? 'Select calendar'}
+                </button>
+                {calDropdownOpen && (
+                  <div className={styles.calendarDropdown}>
+                    {[...calendarsByAccount.entries()].map(([acctId, cals]) => {
+                      const acct = accounts.find((a) => a.id === acctId)
+                      return (
+                        <div key={acctId}>
+                          <div className={styles.calendarGroupLabel}>{acct?.email ?? acctId}</div>
+                          {cals.map((cal) => (
+                            <button
+                              key={cal.id}
+                              className={styles.calendarOption}
+                              onClick={() => {
+                                setSelectedCalId(cal.id)
+                                setSelectedAcctId(cal.account_id)
+                                setCalDropdownOpen(false)
+                              }}
+                            >
+                              <span
+                                className={styles.calendarDot}
+                                style={{ background: cal.color }}
+                              />
+                              {cal.name}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Location */}
+            <div className={styles.field}>
+              <span className={styles.label}>Location</span>
+              {!editingLocation && location ? (
+                <div
+                  className={styles.readonlyValue}
+                  onClick={() => {
+                    setEditingLocation(true)
+                    requestAnimationFrame(() => locationInputRef.current?.focus())
+                  }}
+                >
+                  {isUrl(location) ? (
+                    <a
+                      href={location}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.linkInline}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        void shellOpen(location)
+                      }}
+                    >
+                      {location}
+                    </a>
+                  ) : (
+                    <Linkified text={location} />
+                  )}
+                </div>
+              ) : (
+                <input
+                  ref={locationInputRef}
+                  className={styles.input}
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  onBlur={() => {
+                    if (location) setEditingLocation(false)
+                  }}
+                  placeholder="Add location (optional)"
+                />
               )}
             </div>
-          </div>
 
-          {/* Location */}
-          <div className={styles.field}>
-            <span className={styles.label}>Location</span>
-            {!editingLocation && location ? (
-              <div
-                className={styles.readonlyValue}
-                onClick={() => {
-                  setEditingLocation(true)
-                  requestAnimationFrame(() => locationInputRef.current?.focus())
-                }}
-              >
-                {isUrl(location) ? (
+            {/* Conference link (read-only, edit mode only) */}
+            {isEdit && initial.conferenceUrl && (
+              <div className={styles.field}>
+                <span className={styles.label}>Video call</span>
+                <div className={styles.readonlyValue}>
                   <a
-                    href={location}
+                    href={initial.conferenceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={styles.linkInline}
                     onClick={(e) => {
-                      e.stopPropagation()
                       e.preventDefault()
-                      void shellOpen(location)
+                      void shellOpen(initial.conferenceUrl!)
                     }}
                   >
-                    {location}
+                    ▶ Join video call
                   </a>
-                ) : (
-                  <Linkified text={location} />
-                )}
-              </div>
-            ) : (
-              <input
-                ref={locationInputRef}
-                className={styles.input}
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                onBlur={() => {
-                  if (location) setEditingLocation(false)
-                }}
-                placeholder="Add location (optional)"
-              />
-            )}
-          </div>
-
-          {/* Video conferencing */}
-          <div className={styles.field}>
-            <span className={styles.label}>Video call</span>
-            {isEdit && initial.conferenceUrl ? (
-              <div className={styles.readonlyValue}>
-                <a
-                  href={initial.conferenceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.linkInline}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    void shellOpen(initial.conferenceUrl!)
-                  }}
-                >
-                  ▶ Join video call
-                </a>
-              </div>
-            ) : (
-              <div className={styles.checkboxRow}>
-                <input
-                  type="checkbox"
-                  id="addConference"
-                  checked={addConference}
-                  onChange={(e) => setAddConference(e.target.checked)}
-                />
-                <label htmlFor="addConference">Add Google Meet video conferencing</label>
-              </div>
-            )}
-          </div>
-
-          {/* Guests (attendees) */}
-          <div className={styles.field}>
-            <span className={styles.label}>Guests</span>
-            <div className={styles.guestInputRow}>
-              <input
-                className={styles.input}
-                value={guestInput}
-                onChange={(e) => setGuestInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addGuest()
-                  }
-                }}
-                placeholder="Add guest email"
-              />
-              <button type="button" className={styles.addGuestBtn} onClick={addGuest}>
-                Add
-              </button>
-            </div>
-            {guests.length > 0 && (
-              <div className={styles.guestList}>
-                {guests.map((g) => (
-                  <div key={g.email} className={styles.guestChip}>
-                    <span className={styles.guestEmail}>
-                      {g.displayName ? `${g.displayName} (${g.email})` : g.email}
-                    </span>
-                    {g.responseStatus && (
-                      <span className={styles.guestStatus}>{g.responseStatus}</span>
-                    )}
-                    <button
-                      type="button"
-                      className={styles.removeGuestBtn}
-                      onClick={() => removeGuest(g.email)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Description (collapsible) */}
-          {!showDesc ? (
-            <button type="button" className={styles.descToggle} onClick={() => setShowDesc(true)}>
-              + Add description
-            </button>
-          ) : (
-            <div className={styles.field}>
-              <span className={styles.label}>Description</span>
-              {!editingDesc && description ? (
-                <div
-                  className={styles.readonlyValue}
-                  onClick={() => {
-                    setEditingDesc(true)
-                    requestAnimationFrame(() => descTextareaRef.current?.focus())
-                  }}
-                >
-                  <Linkified text={description} />
                 </div>
-              ) : (
-                <textarea
-                  ref={descTextareaRef}
+              </div>
+            )}
+
+            {/* Guests (attendees) */}
+            <div className={styles.field}>
+              <span className={styles.label}>Guests</span>
+              <div className={styles.guestInputRow}>
+                <input
                   className={styles.input}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  onBlur={() => {
-                    if (description) setEditingDesc(false)
+                  value={guestInput}
+                  onChange={(e) => setGuestInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addGuest()
+                    }
                   }}
-                  placeholder="Add description (optional)"
-                  rows={3}
-                  style={{ resize: 'vertical' }}
+                  placeholder="Add guest email"
                 />
+                <button type="button" className={styles.addGuestBtn} onClick={addGuest}>
+                  Add
+                </button>
+              </div>
+              {guests.length > 0 && (
+                <div className={styles.guestList}>
+                  {guests.map((g) => (
+                    <div key={g.email} className={styles.guestChip}>
+                      <span className={styles.guestEmail}>
+                        {g.displayName ? `${g.displayName} (${g.email})` : g.email}
+                      </span>
+                      {g.responseStatus && (
+                        <span className={styles.guestStatus}>{g.responseStatus}</span>
+                      )}
+                      <button
+                        type="button"
+                        className={styles.removeGuestBtn}
+                        onClick={() => removeGuest(g.email)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          )}
 
-          {/* Recurrence */}
-          <div className={styles.field}>
-            <span className={styles.label}>Repeat</span>
-            <select
-              className={styles.input}
-              value={recurrence}
-              onChange={(e) => setRecurrence(e.target.value)}
-            >
-              <option value="none">Does not repeat</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </div>
+            {/* Description (collapsible) */}
+            {!showDesc ? (
+              <button type="button" className={styles.descToggle} onClick={() => setShowDesc(true)}>
+                + Add description
+              </button>
+            ) : (
+              <div className={styles.field}>
+                <span className={styles.label}>Description</span>
+                {!editingDesc && description ? (
+                  <div
+                    className={styles.readonlyValue}
+                    onClick={() => {
+                      setEditingDesc(true)
+                      requestAnimationFrame(() => descTextareaRef.current?.focus())
+                    }}
+                  >
+                    <Linkified text={description} />
+                  </div>
+                ) : (
+                  <textarea
+                    ref={descTextareaRef}
+                    className={styles.input}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    onBlur={() => {
+                      if (description) setEditingDesc(false)
+                    }}
+                    placeholder="Add description (optional)"
+                    rows={3}
+                    style={{ resize: 'vertical' }}
+                  />
+                )}
+              </div>
+            )}
 
-          {/* Reminders — multiple */}
-          <div className={styles.field}>
-            <span className={styles.label}>Reminders</span>
-            <div className={styles.reminderList}>
-              {reminders.map((entry) => (
-                <div key={entry.id} className={styles.reminderRow}>
-                  {entry.type === 'preset' ? (
-                    <select
-                      value={String(entry.minutes)}
-                      onChange={(e) => handlePresetChange(entry, e.target.value)}
-                    >
-                      {PRESET_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <>
+            {/* Recurrence */}
+            <div className={styles.field}>
+              <span className={styles.label}>Repeat</span>
+              <select
+                className={styles.input}
+                value={recurrence}
+                onChange={(e) => setRecurrence(e.target.value)}
+              >
+                <option value="none">Does not repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+
+            {/* Reminders — multiple */}
+            <div className={styles.field}>
+              <span className={styles.label}>Reminders</span>
+              <div className={styles.reminderList}>
+                {reminders.map((entry) => (
+                  <div key={entry.id} className={styles.reminderRow}>
+                    {entry.type === 'preset' ? (
                       <select
-                        value="custom"
+                        value={String(entry.minutes)}
                         onChange={(e) => handlePresetChange(entry, e.target.value)}
                       >
                         {PRESET_OPTIONS.map((opt) => (
@@ -820,46 +855,82 @@ export default function EventModal({ accounts, calendars, onSaved }: EventModalP
                           </option>
                         ))}
                       </select>
-                      <input
-                        type="number"
-                        min={1}
-                        max={999}
-                        value={entry.customValue ?? 1}
-                        onChange={(e) =>
-                          handleCustomValueChange(entry, Math.max(1, Number(e.target.value)))
-                        }
-                      />
-                      <select
-                        value={entry.customUnit ?? 'minutes'}
-                        onChange={(e) => handleCustomUnitChange(entry, e.target.value)}
+                    ) : (
+                      <>
+                        <select
+                          value="custom"
+                          onChange={(e) => handlePresetChange(entry, e.target.value)}
+                        >
+                          {PRESET_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min={1}
+                          max={999}
+                          value={entry.customValue ?? 1}
+                          onChange={(e) =>
+                            handleCustomValueChange(entry, Math.max(1, Number(e.target.value)))
+                          }
+                        />
+                        <select
+                          value={entry.customUnit ?? 'minutes'}
+                          onChange={(e) => handleCustomUnitChange(entry, e.target.value)}
+                        >
+                          <option value="minutes">minutes</option>
+                          <option value="hours">hours</option>
+                          <option value="days">days</option>
+                          <option value="weeks">weeks</option>
+                        </select>
+                      </>
+                    )}
+                    {reminders.length > 1 && (
+                      <button
+                        type="button"
+                        className={styles.removeReminderBtn}
+                        onClick={() => removeReminder(entry.id)}
                       >
-                        <option value="minutes">minutes</option>
-                        <option value="hours">hours</option>
-                        <option value="days">days</option>
-                        <option value="weeks">weeks</option>
-                      </select>
-                    </>
-                  )}
-                  {reminders.length > 1 && (
-                    <button
-                      type="button"
-                      className={styles.removeReminderBtn}
-                      onClick={() => removeReminder(entry.id)}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-              {reminders.length < 5 && (
-                <button type="button" className={styles.addReminderBtn} onClick={addReminder}>
-                  + Add reminder
-                </button>
-              )}
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {reminders.length < 5 && (
+                  <button type="button" className={styles.addReminderBtn} onClick={addReminder}>
+                    + Add reminder
+                  </button>
+                )}
+              </div>
             </div>
+
+            {error && <p className={styles.error}>{error}</p>}
           </div>
 
-          {error && <p className={styles.error}>{error}</p>}
+          {/* Availability side panel */}
+          {showAvailability && (
+            <div className={styles.availabilitySide}>
+              <AvailabilityPanel
+                organizerEmail={accounts.find((a) => a.id === selectedAcctId)?.email ?? ''}
+                guests={guests}
+                date={date}
+                startTime={startTime}
+                endTime={endTime}
+                busyData={busyData}
+                loading={busyLoading}
+                onTimeSelect={(newStart, newEnd) => {
+                  setStartTime(newStart)
+                  setEndTime(newEnd)
+                }}
+                onDateChange={(newDate) => {
+                  setDate(newDate)
+                  setEndDate(newDate)
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Footer */}

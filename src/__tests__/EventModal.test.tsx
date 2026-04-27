@@ -364,14 +364,15 @@ describe('EventModal', () => {
     await user.type(guestInput, 'alice@example.com')
     await user.click(screen.getByText('Add'))
 
-    expect(screen.getByText('alice@example.com')).toBeInTheDocument()
+    // Email appears in guest chip (and possibly availability row)
+    expect(screen.getAllByText('alice@example.com').length).toBeGreaterThanOrEqual(1)
     expect((guestInput as HTMLInputElement).value).toBe('')
 
     // Add another guest
     await user.type(guestInput, 'bob@example.com')
     await user.click(screen.getByText('Add'))
 
-    expect(screen.getByText('bob@example.com')).toBeInTheDocument()
+    expect(screen.getAllByText('bob@example.com').length).toBeGreaterThanOrEqual(1)
 
     // Remove first guest using the ✕ button next to their email
     const removeButtons = screen
@@ -380,8 +381,12 @@ describe('EventModal', () => {
     expect(removeButtons.length).toBe(2)
 
     await user.click(removeButtons[0])
-    expect(screen.queryByText('alice@example.com')).not.toBeInTheDocument()
-    expect(screen.getByText('bob@example.com')).toBeInTheDocument()
+    // After removal, alice should not appear in guest chips
+    const aliceChips = screen
+      .queryAllByText('alice@example.com')
+      .filter((el) => el.closest('[class*="guestChip"]'))
+    expect(aliceChips.length).toBe(0)
+    expect(screen.getAllByText('bob@example.com').length).toBeGreaterThanOrEqual(1)
   })
 
   it('should not add duplicate or invalid guest emails', async () => {
@@ -396,14 +401,20 @@ describe('EventModal', () => {
     // Add a valid guest
     await user.type(guestInput, 'alice@example.com')
     await user.click(screen.getByText('Add'))
-    expect(screen.getByText('alice@example.com')).toBeInTheDocument()
+    // Count guest chips specifically (email also appears in availability row)
+    const chipsBefore = screen
+      .getAllByText('alice@example.com')
+      .filter((el) => el.closest('[class*="guestChip"]'))
+    expect(chipsBefore.length).toBe(1)
 
     // Try adding the same email again
     await user.type(guestInput, 'alice@example.com')
     await user.click(screen.getByText('Add'))
-    // Should still only appear once
-    const matches = screen.getAllByText('alice@example.com')
-    expect(matches.length).toBe(1)
+    // Should still only have one guest chip
+    const chipsAfter = screen
+      .getAllByText('alice@example.com')
+      .filter((el) => el.closest('[class*="guestChip"]'))
+    expect(chipsAfter.length).toBe(1)
 
     // Try adding an invalid email
     await user.type(guestInput, 'not-an-email')
@@ -421,16 +432,7 @@ describe('EventModal', () => {
     const guestInput = screen.getByPlaceholderText('Add guest email')
 
     await user.type(guestInput, 'carol@example.com{Enter}')
-    expect(screen.getByText('carol@example.com')).toBeInTheDocument()
-  })
-
-  it('should render the Google Meet conference toggle', () => {
-    renderWithQuery(
-      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
-    )
-
-    expect(screen.getByText('Video call')).toBeInTheDocument()
-    expect(screen.getByLabelText('Add Google Meet video conferencing')).toBeInTheDocument()
+    expect(screen.getAllByText('carol@example.com').length).toBeGreaterThanOrEqual(1)
   })
 
   it('should show conference join link in edit mode when URL exists', () => {
@@ -454,8 +456,6 @@ describe('EventModal', () => {
     )
 
     expect(screen.getByText('▶ Join video call')).toBeInTheDocument()
-    // The toggle should not be shown when a conference URL already exists
-    expect(screen.queryByLabelText('Add Google Meet video conferencing')).not.toBeInTheDocument()
   })
 
   it('should show existing attendees in edit mode', () => {
@@ -482,8 +482,49 @@ describe('EventModal', () => {
     )
 
     expect(screen.getByText('Alice (alice@test.com)')).toBeInTheDocument()
-    expect(screen.getByText('bob@test.com')).toBeInTheDocument()
+    expect(screen.getAllByText('bob@test.com').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('accepted')).toBeInTheDocument()
     expect(screen.getByText('needsAction')).toBeInTheDocument()
+  })
+
+  it('should show availability section when guests are present', async () => {
+    const user = userEvent.setup()
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    // No availability panel without guests
+    expect(screen.queryByTestId('availability-panel')).not.toBeInTheDocument()
+
+    // Add a guest to trigger the availability panel
+    const guestInput = screen.getByPlaceholderText('Add guest email')
+    await user.type(guestInput, 'alice@example.com')
+    await user.click(screen.getByText('Add'))
+
+    expect(screen.getByTestId('availability-panel')).toBeInTheDocument()
+  })
+
+  it('should not show availability section for all-day events', () => {
+    useUIStore.setState({
+      showEventModal: true,
+      eventModalDefaults: {
+        mode: 'edit',
+        date: '2026-03-15',
+        allDay: true,
+        eventId: 'ev1',
+        accountId: 'a1',
+        calendarId: 'cal1',
+        title: 'All Day Event',
+        attendees: [{ email: 'alice@test.com', responseStatus: 'accepted' }],
+      },
+    })
+
+    renderWithQuery(
+      <EventModal accounts={MOCK_ACCOUNTS} calendars={MOCK_CALENDARS} onSaved={vi.fn()} />,
+    )
+
+    // Has a guest but is all-day, so no availability panel
+    expect(screen.queryByTestId('availability-panel')).not.toBeInTheDocument()
   })
 })
