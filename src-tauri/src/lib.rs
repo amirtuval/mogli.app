@@ -66,6 +66,7 @@ fn create_builder() -> Builder<tauri::Wry> {
         commands::calendar::create_event,
         commands::calendar::update_event,
         commands::calendar::delete_event,
+        commands::calendar::get_freebusy,
         commands::calendar::dismiss_reminder,
         commands::calendar::snooze_reminder,
         commands::calendar::get_active_reminders,

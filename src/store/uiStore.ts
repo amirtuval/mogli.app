@@ -27,6 +27,7 @@ export interface EventModalData {
   conferenceUrl?: string
   recurrence?: string
   reminders?: number[]
+  attendees?: Array<{ email: string; displayName?: string; responseStatus?: string }>
 }
 
 const VALID_THEMES: Theme[] = ['light', 'dark', 'ultraDark']

@@ -498,6 +498,29 @@ export const commands = {
     }
   },
   /**
+   * Query the Google Calendar `FreeBusy` API for guest availability.
+   *
+   * For each email that belongs to a connected Mogly account, queries using that
+   * account's own OAuth token so we always get accurate data. Remaining external
+   * emails are queried via the requesting account's token (may return no access).
+   */
+  async getFreebusy(
+    accountId: string,
+    emails: string[],
+    timeMin: number,
+    timeMax: number,
+  ): Promise<Result<FreeBusyResult[], string>> {
+    try {
+      return {
+        status: 'ok',
+        data: await TAURI_INVOKE('get_freebusy', { accountId, emails, timeMin, timeMax }),
+      }
+    } catch (e) {
+      if (e instanceof Error) throw e
+      else return { status: 'error', error: e as any }
+    }
+  },
+  /**
    * Dismiss a calendar reminder: remove from backend active list and log.
    */
   async dismissReminder(eventId: string): Promise<Result<null, string>> {
@@ -600,9 +623,28 @@ export type Account = {
 }
 export type Attachment = { id: string; filename: string; mime_type: string; size: number }
 /**
+ * A calendar event attendee.
+ */
+export type Attendee = {
+  email: string
+  display_name: string | null
+  response_status: string | null
+  is_optional: boolean
+  is_organizer: boolean
+  is_self: boolean
+}
+/**
+ * Attendee input from the frontend.
+ */
+export type AttendeeInput = { email: string; name: string | null }
+/**
  * An item in a batch modify request (account + thread pair).
  */
 export type BatchModifyItem = { account_id: string; thread_id: string }
+/**
+ * A busy period returned by the `FreeBusy` API.
+ */
+export type BusyPeriod = { start: number; end: number }
 /**
  * Calendar event.
  */
@@ -618,6 +660,7 @@ export type CalEvent = {
   description: string | null
   color: string | null
   conference_url: string | null
+  attendees: Attendee[]
 }
 /**
  * A single Google Calendar within an account.
@@ -638,6 +681,20 @@ export type CreateEventOptionals = {
   description: string | null
   recurrence: string[] | null
   reminder_minutes: number[] | null
+  attendees: AttendeeInput[] | null
+}
+/**
+ * `FreeBusy` result for a single calendar/email.
+ */
+export type FreeBusyResult = {
+  calendar_id: string
+  busy: BusyPeriod[]
+  /**
+   * Whether the authenticated user has permission to view this calendar's
+   * free/busy data. `false` when the Google API returns per-calendar errors
+   * (e.g. `notFound`).
+   */
+  has_access: boolean
 }
 export type Message = {
   id: string
@@ -699,6 +756,7 @@ export type UpdateEventOptionals = {
   description: string | null
   recurrence: string[] | null
   reminder_minutes: number[] | null
+  attendees: AttendeeInput[] | null
 }
 
 /** tauri-specta globals **/

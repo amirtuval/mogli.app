@@ -333,6 +333,11 @@ export default function CalendarView({
         conferenceUrl: ev.conference_url ?? undefined,
         recurrence: 'none',
         reminders: [],
+        attendees: ev.attendees.map((a) => ({
+          email: a.email,
+          displayName: a.display_name ?? undefined,
+          responseStatus: a.response_status ?? undefined,
+        })),
       })
     },
     [openEventModal],
@@ -487,6 +492,10 @@ export default function CalendarView({
           rest: {
             location: final.event.location,
             description: final.event.description,
+            attendees: final.event.attendees.map((a) => ({
+              email: a.email,
+              name: a.display_name,
+            })),
           },
         }).catch(() => {
           // Revert optimistic update on error

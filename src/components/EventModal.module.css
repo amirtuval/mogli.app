@@ -18,6 +18,11 @@
   flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border);
+  transition: max-width 0.2s ease;
+}
+
+.modalWide {
+  max-width: 900px;
 }
 
 .header {
@@ -50,6 +55,13 @@
   color: var(--text-primary);
 }
 
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
 .form {
   padding: 14px 18px;
   flex: 1;
@@ -57,6 +69,17 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+}
+
+.availabilitySide {
+  width: 420px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
 }
 
 .field {
@@ -302,6 +325,83 @@
 
 .addReminderBtn:hover {
   text-decoration: underline;
+}
+
+/* ── Guests ── */
+
+.guestInputRow {
+  display: flex;
+  gap: 6px;
+}
+
+.guestInputRow .input {
+  flex: 1;
+}
+
+.addGuestBtn {
+  border: 1px solid var(--border);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.addGuestBtn:hover {
+  background: var(--bg-hover);
+}
+
+.guestList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.guestChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.guestEmail {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guestStatus {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.removeGuestBtn {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.removeGuestBtn:hover {
+  color: #f43f5e;
+  background: var(--bg-hover);
 }
 
 /* ── Footer ── */

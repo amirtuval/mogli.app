@@ -33,6 +33,35 @@ pub struct Calendar {
     pub primary: bool,
 }
 
+/// A calendar event attendee.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct Attendee {
+    pub email: String,
+    pub display_name: Option<String>,
+    pub response_status: Option<String>,
+    pub is_optional: bool,
+    pub is_organizer: bool,
+    pub is_self: bool,
+}
+
+/// A busy period returned by the `FreeBusy` API.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct BusyPeriod {
+    pub start: i64,
+    pub end: i64,
+}
+
+/// `FreeBusy` result for a single calendar/email.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct FreeBusyResult {
+    pub calendar_id: String,
+    pub busy: Vec<BusyPeriod>,
+    /// Whether the authenticated user has permission to view this calendar's
+    /// free/busy data. `false` when the Google API returns per-calendar errors
+    /// (e.g. `notFound`).
+    pub has_access: bool,
+}
+
 /// Calendar event.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct CalEvent {
@@ -47,6 +76,7 @@ pub struct CalEvent {
     pub description: Option<String>,
     pub color: Option<String>,
     pub conference_url: Option<String>,
+    pub attendees: Vec<Attendee>,
 }
 
 /// Message metadata — never stores body.

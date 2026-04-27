@@ -151,6 +151,20 @@ pub async fn create_event(
 ) -> Result<CalEvent, String> {
     let creds = OAuthCredentials::load()?;
     let email = store::account_email(&app, &account_id)?;
+
+    let attendee_models: Option<Vec<crate::models::Attendee>> = rest.attendees.map(|list| {
+        list.into_iter()
+            .map(|a| crate::models::Attendee {
+                email: a.email,
+                display_name: a.name,
+                response_status: None,
+                is_optional: false,
+                is_organizer: false,
+                is_self: false,
+            })
+            .collect()
+    });
+
     calendar_api::create_event(
         &creds,
         &account_id,
@@ -165,6 +179,7 @@ pub async fn create_event(
         rest.description.as_deref(),
         rest.recurrence.as_deref(),
         rest.reminder_minutes.as_deref(),
+        attendee_models.as_deref(),
     )
     .await
 }
@@ -189,6 +204,20 @@ pub async fn update_event(
 ) -> Result<CalEvent, String> {
     let creds = OAuthCredentials::load()?;
     let email = store::account_email(&app, &account_id)?;
+
+    let attendee_models: Option<Vec<crate::models::Attendee>> = rest.attendees.map(|list| {
+        list.into_iter()
+            .map(|a| crate::models::Attendee {
+                email: a.email,
+                display_name: a.name,
+                response_status: None,
+                is_optional: false,
+                is_organizer: false,
+                is_self: false,
+            })
+            .collect()
+    });
+
     calendar_api::update_event(
         &creds,
         &account_id,
@@ -204,6 +233,7 @@ pub async fn update_event(
         rest.description.as_deref(),
         rest.recurrence.as_deref(),
         rest.reminder_minutes.as_deref(),
+        attendee_models.as_deref(),
     )
     .await
 }
@@ -222,6 +252,68 @@ pub async fn delete_event(
     calendar_api::delete_event(&creds, &email, &calendar_id, &event_id).await
 }
 
+/// Query the Google Calendar `FreeBusy` API for guest availability.
+///
+/// For each email that belongs to a connected Mogly account, queries using that
+/// account's own OAuth token so we always get accurate data. Remaining external
+/// emails are queried via the requesting account's token (may return no access).
+#[tauri::command]
+#[specta::specta]
+pub async fn get_freebusy(
+    app: AppHandle,
+    account_id: String,
+    emails: Vec<String>,
+    time_min: i64,
+    time_max: i64,
+) -> Result<Vec<crate::models::FreeBusyResult>, String> {
+    let creds = OAuthCredentials::load()?;
+    let all_accounts = store::load_accounts(&app)?;
+    let primary_email = store::account_email(&app, &account_id)?;
+
+    // Partition requested emails into connected accounts vs external
+    let mut results: Vec<crate::models::FreeBusyResult> = Vec::new();
+    let mut external_emails: Vec<String> = Vec::new();
+
+    for email in &emails {
+        if let Some(acct) = all_accounts.iter().find(|a| a.email == *email) {
+            // Query this account's own FreeBusy using its own token
+            let mut acct_results = calendar_api::query_freebusy(
+                &creds,
+                &acct.email,
+                time_min,
+                time_max,
+                std::slice::from_ref(email),
+            )
+            .await?;
+            results.append(&mut acct_results);
+        } else {
+            external_emails.push(email.clone());
+        }
+    }
+
+    // Query remaining external emails via the requesting account
+    if !external_emails.is_empty() {
+        let mut ext_results = calendar_api::query_freebusy(
+            &creds,
+            &primary_email,
+            time_min,
+            time_max,
+            &external_emails,
+        )
+        .await?;
+        results.append(&mut ext_results);
+    }
+
+    Ok(results)
+}
+
+/// Attendee input from the frontend.
+#[derive(Debug, serde::Deserialize, specta::Type)]
+pub struct AttendeeInput {
+    pub email: String,
+    pub name: Option<String>,
+}
+
 /// Optional fields for `create_event`, bundled to stay within specta's 10-param limit.
 #[derive(Debug, serde::Deserialize, specta::Type)]
 pub struct CreateEventOptionals {
@@ -229,6 +321,7 @@ pub struct CreateEventOptionals {
     pub description: Option<String>,
     pub recurrence: Option<Vec<String>>,
     pub reminder_minutes: Option<Vec<i32>>,
+    pub attendees: Option<Vec<AttendeeInput>>,
 }
 
 /// Optional fields for `update_event`, bundled to stay within specta's 10-param limit.
@@ -238,6 +331,7 @@ pub struct UpdateEventOptionals {
     pub description: Option<String>,
     pub recurrence: Option<Vec<String>>,
     pub reminder_minutes: Option<Vec<i32>>,
+    pub attendees: Option<Vec<AttendeeInput>>,
 }
 
 /// Return all currently-active reminder payloads.
