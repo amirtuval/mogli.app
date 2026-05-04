@@ -103,6 +103,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
       invoke('mark_read', { accountId, threadId: selectedThreadId }).then(() => {
         queryClient.invalidateQueries({ queryKey: ['messages'] })
         queryClient.invalidateQueries({ queryKey: ['search'] })
+        queryClient.invalidateQueries({ queryKey: ['unreadCount'] })
       })
     }, 2000)
 
@@ -121,6 +122,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
       await invoke(command, { accountId, threadId: selectedThreadId })
       queryClient.invalidateQueries({ queryKey: ['messages'] })
       queryClient.invalidateQueries({ queryKey: ['search'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadCount'] })
     } catch (e) {
       console.error(`${command} failed:`, e)
     }
@@ -131,6 +133,7 @@ export default function EmailDetail({ accounts, selectedMessage }: EmailDetailPr
     try {
       await invoke('archive_thread', { accountId, threadId: selectedThreadId })
       queryClient.invalidateQueries({ queryKey: ['messages'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadCount'] })
       useUIStore.getState().setSelectedThreadId(null)
     } catch (e) {
       console.error('Archive failed:', e)
