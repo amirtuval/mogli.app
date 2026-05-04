@@ -54,7 +54,8 @@ function renderWithQuery(ui: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  const result = render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  return { ...result, queryClient }
 }
 
 describe('EmailDetail', () => {
@@ -334,5 +335,71 @@ describe('EmailDetail', () => {
     await user.click(checkbox)
 
     expect(useUIStore.getState().autoMarkRead).toBe(true)
+  })
+
+  it('should invalidate unreadCount query after marking a thread unread', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD).mockResolvedValueOnce(undefined)
+
+    const { queryClient } = renderWithQuery(
+      <EmailDetail
+        accounts={MOCK_ACCOUNTS}
+        selectedMessage={{ ...MOCK_SELECTED_MESSAGE, unread: false }}
+      />,
+    )
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    await waitFor(() => {
+      expect(screen.getByText('○ Mark unread')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('○ Mark unread'))
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['unreadCount'] })
+    })
+  })
+
+  it('should invalidate unreadCount query after marking a thread read', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD).mockResolvedValueOnce(undefined)
+
+    const { queryClient } = renderWithQuery(
+      <EmailDetail
+        accounts={MOCK_ACCOUNTS}
+        selectedMessage={{ ...MOCK_SELECTED_MESSAGE, unread: true }}
+      />,
+    )
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Mark read')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('✓ Mark read'))
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['unreadCount'] })
+    })
+  })
+
+  it('should invalidate unreadCount query after archiving a thread', async () => {
+    const user = userEvent.setup()
+    mockedInvoke.mockResolvedValueOnce(MOCK_THREAD).mockResolvedValueOnce(undefined)
+
+    const { queryClient } = renderWithQuery(
+      <EmailDetail accounts={MOCK_ACCOUNTS} selectedMessage={MOCK_SELECTED_MESSAGE} />,
+    )
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    await waitFor(() => {
+      expect(screen.getByText('Archive')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('Archive'))
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['unreadCount'] })
+    })
   })
 })

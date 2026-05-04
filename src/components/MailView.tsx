@@ -55,6 +55,7 @@ export default function MailView({ accounts, messages, isLoading }: MailViewProp
       })
       queryClient.invalidateQueries({ queryKey: ['messages'] })
       queryClient.invalidateQueries({ queryKey: ['search'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadCount'] })
       clearSelection()
     } catch (e) {
       console.error('Batch modify failed:', e)
